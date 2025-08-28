@@ -1,0 +1,30 @@
+<div class="download-container">
+  <h1>Proda File Generate</h1>
+  <form [formGroup]="reportForm" (ngSubmit)="onDownloadFile()">
+
+    <div class="form-group">
+      <label for="rentRollDate">Date:</label>
+      <input type="date" id="rentRollDate" formControlName="rentRollDate" [attr.max]="maxDate" required>
+      <div *ngIf="reportForm.get('rentRollDate')?.invalid && (reportForm.get('rentRollDate')?.dirty || reportForm.get('rentRollDate')?.touched)" class="error-message">
+        Date is required.
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="projectName">Project Name:</label>
+      <input type="text" id="projectName" formControlName="projectName" placeholder="Enter project name">
+      <div *ngIf="reportForm.get('projectName')?.invalid && (reportForm.get('projectName')?.dirty || reportForm.get('projectName')?.touched)" class="error-message">
+        Only letters and spaces are allowed.
+      </div>
+    </div>
+
+    <button type="submit" [disabled]="reportForm.invalid || isDownloading">
+      <span *ngIf="isDownloading" class="spinner"></span>
+      {{ isDownloading ? 'Downloading...' : 'Download File' }}
+    </button>
+  </form>
+
+  <div *ngIf="downloadMessage" class="status-message">
+    {{ downloadMessage }}
+  </div>
+</div>
