@@ -23,7 +23,7 @@ steps:
 - script: |
     npm install -g @angular/cli@20.x
     npm install
-    ng build -c dev --build-optimizer --aot --common-chunk --vendor-chunk --delete-output-path --output-hashing=all
+    ng build -c dev
   displayName: 'npm install and build'
 - task: ArchiveFiles@2
   inputs:
