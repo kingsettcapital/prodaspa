@@ -21,17 +21,6 @@ steps:
   displayName: 'Install Node.js 20.x'
 
 - script: |
-    git config --global user.email "$(Build.RequestedForEmail)"
-    git config --global user.name "$(Build.RequestedFor)"
-    # increment the patch version by 1
-    # create a version commit and tag
-    # use [skip ci] in the commit message to skip from triggering the ci pipeline.
-    npm version patch -f -m "bump version [skip ci]"
-    # push back to azure git repo
-    git push origin HEAD:$(Build.SourceBranchName) -q
-  displayName: 'Increment version and update package.json'
-
-- script: |
     npm install -g @angular/cli@20.x
     npm install
     ng build -c dev --build-optimizer --aot --common-chunk --vendor-chunk --delete-output-path --output-hashing=all
