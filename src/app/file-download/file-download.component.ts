@@ -7,7 +7,7 @@ import {ApiService} from '../api.service';
   selector: 'app-file-download',
   standalone: false,
   templateUrl: './file-download.component.html',
-  styleUrl: './file-download.component.css'
+  styleUrls : ['./file-download.component.css']
 })
 export class FileDownloadComponent implements OnInit {
   reportForm = new FormGroup({

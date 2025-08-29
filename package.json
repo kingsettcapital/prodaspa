@@ -1,6 +1,6 @@
 {
-  "name": "prodaspa",
-  "version": "0.0.1",
+  "name": "kingsett",
+  "version": "0.0.0",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
@@ -8,44 +8,43 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },
-  "prettier": {
-    "printWidth": 100,
-    "singleQuote": true,
-    "overrides": [
-      {
-        "files": "*.html",
-        "options": {
-          "parser": "angular"
-        }
-      }
-    ]
-  },
   "private": true,
   "dependencies": {
-    "@angular/common": "^20.2.0",
-    "@angular/compiler": "^20.2.0",
-    "@angular/core": "^20.2.0",
-    "@angular/forms": "^20.2.0",
-    "@angular/platform-browser": "^20.2.0",
-    "@angular/router": "^20.2.0",
+    "@angular/animations": "^14.2.0",
+    "@angular/cdk": "^14.2.7",
+    "@angular/common": "^14.2.0",
+    "@angular/compiler": "^14.2.0",
+    "@angular/core": "^14.2.0",
+    "@angular/flex-layout": "^14.0.0-beta.40",
+    "@angular/forms": "^14.2.0",
+    "@angular/material": "^14.2.7",
+    "@angular/platform-browser": "^14.2.0",
+    "@angular/platform-browser-dynamic": "^14.2.0",
+    "@angular/router": "^14.2.0",
+    "@azure/msal-angular": "^2.5.5",
+    "@azure/msal-browser": "^2.37.0",
+    "dayjs": "^1.11.13",
+    "devextreme": "^21.2.15",
+    "devextreme-angular": "^21.2.15",
     "file-saver": "^2.0.5",
-    "rxjs": "~7.8.0",
+    "rxjs": "~7.5.0",
     "tslib": "^2.3.0",
-    "zone.js": "~0.15.0"
+    "xlsx": "^0.18.5",
+    "zone.js": "~0.11.4"
   },
   "devDependencies": {
-    "@angular/build": "^20.2.0",
-    "@angular/cli": "^20.2.0",
-    "@angular/compiler-cli": "^20.2.0",
+    "@angular-devkit/build-angular": "^14.2.13",
+    "@angular/cli": "~14.2.13",
+    "@angular/compiler-cli": "^14.2.0",
     "@types/file-saver": "^2.0.7",
-    "@types/jasmine": "~5.1.0",
-    "@types/node": "^24.3.0",
-    "jasmine-core": "~5.9.0",
+    "@types/jasmine": "~4.0.0",
+    "@types/node": "^16.11.7",
+    "jasmine-core": "~4.3.0",
     "karma": "~6.4.0",
-    "karma-chrome-launcher": "~3.2.0",
+    "karma-chrome-launcher": "~3.1.0",
     "karma-coverage": "~2.2.0",
     "karma-jasmine": "~5.1.0",
-    "karma-jasmine-html-reporter": "~2.1.0",
-    "typescript": "~5.9.2"
+    "karma-jasmine-html-reporter": "~2.0.0",
+    "typescript": "~4.7.2"
   }
 }
