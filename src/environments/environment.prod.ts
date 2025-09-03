@@ -1,6 +1,6 @@
 export const environment = {
-   //apiUrl : "http://localhost:5005/api",
-  apiUrl: "https://prodagatewaydev.kingsettcapital.com/api",
+  // apiUrl : "http://localhost:5005/api",
+  apiUrl: "https://prodagateway.kingsettcapital.com/api",
   apiKey: "118dab24-8387-40e6-865d-04f55d4aaaa9",
   production: false,
   appVersion: require('../../package.json').version,
@@ -13,8 +13,3 @@ export const environment = {
     scopes: "api://7faad414-e5b5-46f8-b2fa-9eb7272f8fea/Read"
   },
 };
-
-// export const environment = {
-//   production: false,
-//   apiKey: "118dab24-8387-40e6-865d-04f55d4aaaa9"
-// };
