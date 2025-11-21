@@ -1,0 +1,79 @@
+@use '@angular/material' as mat;
+
+:root {
+    --kma-primary: #0C274A;
+    --kma-secondary: #3d3d3d;
+    --kma-active-navigation: #5c95c5;
+    --kma-hover-navigation: #5f687d;
+
+    --kma-success: #18519b;
+    --kma-error: #f53d3d;
+    --kma-warning: #ffcc00;
+    --kma-info: #808080;
+    --kma-default: #ffffff;
+    --kma-light: #dddddd;
+    --kma-lightblue: #51b4d4;
+    --kma-lightgreen: #4a8003;
+    --kma-green: #107c41;
+
+    --kma-ripplecolor: rgba(0, 178, 0, 0.26);
+    --kma-black: black;
+
+    --kma-disabled: #7e7d7d;
+    --kma-glass-bg: rgba(255, 255, 255, 0.15);
+}
+
+.mdc-button.mat-accent {
+  background-color:#cfa600 !important;
+  color: #191919 !important;
+}
+
+.mdc-button.mat-accent:disabled {
+  background-color: var(--kma-disabled) !important;
+  color: var(--kma-deafult) !important;
+}
+
+.mat-mdc-row,
+.mat-mdc-header-row {
+  height: 36px !important;
+}
+
+.mat-mdc-cell,
+.mat-mdc-header-cell {
+  padding: 4px 12px !important;
+  font-size: 13px;
+}
+
+.mui-alert {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: 4px;
+  font-weight: 500;
+  gap: 8px;
+  margin-bottom: 10px;
+
+  &.mui-alert-error {
+    background-color: #fdecea;
+    color: #b71c1c;
+    border: 1px solid #f5c6cb;
+  }
+
+  &.mui-alert-success {
+    background-color: #edf7ed;
+    color: #1b5e20;
+    border: 1px solid #c8e6c9;
+  }
+
+  &.mui-alert-warning {
+    background-color: #fff8e1;
+    color: #795548;
+    border: 1px solid #ffe0b2;
+  }
+
+  &.mui-alert-info {
+    background-color: #e3f2fd;
+    color: #0d47a1;
+    border: 1px solid #90caf9;
+  }
+}

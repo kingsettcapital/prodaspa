@@ -1,0 +1,58 @@
+<div class="download-page-wrapper">
+  <div class="download-container mat-elevation-z8">
+    <div class="card-content">
+      <h1>Proda File Generate</h1>
+
+      <form [formGroup]="reportForm" (ngSubmit)="onDownloadFile()" class="download-form">
+        <div class="form-field">
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Date</mat-label>
+              <input 
+                matInput
+                [matDatepicker]="picker"
+                formControlName="rentRollDate"
+                [max]="maxDate"
+                required
+                placeholder="Choose a date"
+                readonly
+                (click)="picker.open()"
+              />
+            <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+            <mat-datepicker #picker></mat-datepicker>
+          </mat-form-field>
+          <div class="error-message"
+            *ngIf="reportForm.get('rentRollDate')?.invalid && (reportForm.get('rentRollDate')?.dirty || reportForm.get('rentRollDate')?.touched)">
+            Date is required.
+          </div>
+        </div>
+
+        <div class="form-field">
+          <mat-form-field appearance="outline" class="full-width date-input">
+            <mat-label>Project Name</mat-label>
+            <input matInput type="text" formControlName="projectName" placeholder="Enter project name">
+          </mat-form-field>
+          <div class="error-message" 
+            *ngIf="reportForm.get('projectName')?.invalid && (reportForm.get('projectName')?.dirty || reportForm.get('projectName')?.touched)">
+            <span *ngIf="reportForm.get('projectName')?.hasError('pattern')">
+              Only letters and spaces are allowed
+            </span>
+            <span *ngIf="reportForm.get('projectName')?.hasError('required')">
+              Project name is required
+            </span>
+          </div>
+        </div>
+
+        <button mat-raised-button color="primary" class="download-btn" type="submit"
+          [disabled]="reportForm.invalid || isDownloading">
+          <span *ngIf="isDownloading" class="spinner"></span>
+          <span>{{ isDownloading ? 'Downloading...' : 'Download File' }}</span>
+        </button>
+      </form>
+
+      <mat-card *ngIf="downloadMessage" class="status-message"
+        [ngClass]="{ 'error': isErrorMessage, 'success': !isErrorMessage }">
+        {{ downloadMessage }}
+      </mat-card>
+    </div>
+  </div>
+</div>

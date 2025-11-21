@@ -30,8 +30,14 @@
             "styles": [
               "node_modules/devextreme/dist/css/dx.light.css",
               "src/styles.scss",
-              "src/assets/icon.css"
+              "src/assets/icon.scss",
+              "src/theme.scss"
             ],
+            "stylePreprocessorOptions": {
+              "includePaths": [
+                "src/theme"
+              ]
+            },
             "scripts": []
           },
           "configurations": {
@@ -151,7 +157,8 @@
             "styles": [
               "node_modules/devextreme/dist/css/dx.light.css",
               "src/styles.scss",
-              "src/assets/icon.css"
+              "src/assets/icon.scss",
+              "src/theme.scss"
             ],
             "scripts": []
           }

@@ -5,12 +5,10 @@ export const environment = {
   production: false,
   appVersion: require('../../package.json').version,
   azureConfig: {
-      // Application/client ID of registered SPA app
-    clientId: '1ca558e3-5dea-49ba-8080-f490ff880c00',
-    // https://login.microsoft.com/{Tenant ID of registered SPA app}
-    authority: 'https://login.microsoft.com/f6d94abc-5472-43af-ab66-95726e5ab0cc',
-    // Scope set for registered API app
-    scopes: "api://7faad414-e5b5-46f8-b2fa-9eb7272f8fea/Read"
+    clientId: '297477b6-8858-4fd3-b3af-a94ca8417383',
+    authority: 'https://login.microsoftonline.com/f6d94abc-5472-43af-ab66-95726e5ab0cc',
+    redirectURL: 'http://localhost:4200',
+    scopes: "api://72f4a3ee-d31a-49a9-81d7-22ceaa896746/Read",
   },
 };
 

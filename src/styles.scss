@@ -1,1 +1,107 @@
-/* You can add global styles to this file, and also import other style files */
+@use '@angular/material' as mat;
+@use "./theme/breakpoints";
+@use "./theme/palette";
+@use "./theme/material";
+@use "./theme/breakpoints" as *;
+@use './theme/palette' as ksa;
+
+$primary-palette: mat.define-palette(ksa.$ksa-primary, 500, 300, 700);
+$accent-palette: mat.define-palette(ksa.$ksa-accent, 500, 300, 700);
+$warn-palette: mat.define-palette(mat.$red-palette);
+
+$my-typography: mat.define-typography-config(
+  $font-family: 'Roboto, Helvetica Neue, sans-serif'
+);
+
+$my-theme: mat.define-light-theme((
+  color: (
+    primary: $primary-palette,
+    accent: $accent-palette,
+    // warn: $warn-palette,
+    tertiary: mat.$blue-palette,
+  ),
+  typography: $my-typography,
+  density: 0
+));
+
+@include mat.core();
+@include mat.all-component-themes($my-theme);
+
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+  color-scheme: light;
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+}
+
+.error-message {
+  color: var(--kma-error);
+  margin-top: 12px;
+  text-align: center;
+}
+
+.mat-mdc-paginator-range-actions .mat-mdc-paginator-range-label {
+  font-size: 13px;
+} 
+
+@media (max-width: 599px) {
+  .mat-mdc-paginator-range-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .mat-mdc-paginator-range-label{
+    min-width: 200px;
+    text-align: center;
+  }
+}
+
+.mat-mdc-select-panel {
+  background-color: #fff !important;
+}
+
+.no-data-container{
+  background: #f4f4f4;
+  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 70px;
+}
+
+mark {
+  background-color: #ffeb3b;
+  color: #000;
+  padding: 2px !important;
+  border-radius: 2px;
+}
+
+.button-spinner {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+.button-spinner ::ng-deep circle {
+  stroke: var(--kma-default) !important;
+}
+
+.mat-mdc-menu-content {
+  background-color: var(--kma-default) !important;
+}
+
+.mat-mdc-snack-bar-container.ns-success,
+.mat-mdc-snack-bar-container.ns-error {
+  margin-top: 95px !important;
+}
+
+mat-card {
+  border-radius: 12px !important;
+}
+
+.custom-snackbar {
+  margin-top: 80px !important;
+}

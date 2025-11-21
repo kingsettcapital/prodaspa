@@ -1,0 +1,81 @@
+<mat-sidenav-container class="layout-container">
+  <mat-sidenav #sidenav mode="over" class="side-nav">
+    <div class="">
+      <div class="side-logo">
+        <img src="assets/kingsett-logo.svg" alt="KingSett Logo" class="logo" />
+      </div>
+      <mat-nav-list class="side-nav-list">
+        <a mat-list-item *ngFor="let item of navItems; index as i" [routerLink]="item.route" routerLinkActive="active-link"
+          [routerLinkActiveOptions]="{ exact: true }" (click)="sidenav.close()">
+          <mat-icon>{{ item.icon }}</mat-icon>
+          <span>{{ item.label }}</span>
+        </a>
+      </mat-nav-list>
+    </div>
+
+    <div class="side-footer">
+      <div class="profile-menu-wrapper" [class.active-link]="router.url === '/profile'">
+        <button class="profile-btn">
+          <mat-icon>person</mat-icon>
+          <span>{{ userName || 'Profile' }}</span>
+        </button>
+        <button [disabled]="showCookieModal" mat-icon-button [matMenuTriggerFor]="profileMenu" class="menu-icon-btn">
+          <mat-icon>more_vert</mat-icon>
+        </button>
+      </div>
+      <button class="logout-btn" (click)="logout()">
+        <mat-icon>logout</mat-icon>
+        <span>Logout</span>
+      </button>
+    </div>
+  </mat-sidenav>
+
+  <mat-sidenav-content class="content-wrapper">
+    <mat-toolbar color="primary" class="top-toolbar fixed-header">
+      <div class="left-section">
+        <button mat-icon-button class="hamburger" (click)="sidenav.toggle()">
+          <mat-icon>menu</mat-icon>
+        </button>
+        <div class="logo-section">
+          <img src="assets/kingsett-logo.svg" alt="KingSett Logo" class="logo" />
+        </div>
+      </div>
+
+      <div class="nav-links hide-on-mobile">
+        <a *ngFor="let item of navItems; index as i" [routerLink]="item.route"
+          routerLinkActive="active">{{ item.label }}</a>
+      </div>
+
+      <div class="right-section">
+        <button mat-button [matMenuTriggerFor]="profileMenu" class="profile-btn">
+          <mat-icon class="profile-icon">person</mat-icon>
+          <span class="name-arrow">
+            <span>{{ userName || 'Profile' }}</span>
+            <mat-icon>keyboard_arrow_down</mat-icon>
+          </span>
+        </button>
+        <button mat-button class="logout-btn" (click)="logout()">
+          <mat-icon>logout</mat-icon>
+          <span>Logout</span>
+        </button>
+      </div>
+    </mat-toolbar>
+
+    <mat-menu #profileMenu="matMenu" class="profile-menu">
+      <a [class.disabled]="showCookieModal" mat-menu-item [routerLink]="'/profile'" (click)="onProfileMenuClick(sidenav)">
+        <mat-icon>account_circle</mat-icon>
+        <span>Profile</span>
+      </a>
+      <button [disabled]="showCookieModal" mat-menu-item (click)="openChangePassword(sidenav)">
+        <mat-icon>lock</mat-icon>
+        <span>Change Password</span>
+      </button>
+    </mat-menu>
+
+    <main class="layout-content">
+      <router-outlet></router-outlet>
+      <!-- <app-footer class="fixed-footer"></app-footer> -->
+    </main>
+
+  </mat-sidenav-content>
+</mat-sidenav-container>

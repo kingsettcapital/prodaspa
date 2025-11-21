@@ -1,0 +1,54 @@
+.login-card {
+    max-width:420px;
+    margin-top:48px;
+    margin-bottom: 48px;
+    padding:0px
+
+    h2 {
+        margin:0 0 16px 0;
+    }
+
+    ::ng-deep mat-form-field {
+        width:100%;
+        margin-bottom:12px;
+
+        .mat-form-field-wrapper .mat-form-field-flex {
+            height: 56px;
+
+            .mat-form-field-infix {
+                padding: 0.65em 0 1em 0;
+            }
+        }
+    }
+
+    .actions-container {
+        width: 100%;
+        margin-top:16px;
+        display:flex;
+        gap:12px;
+        align-items:center;
+        flex-direction: column;
+    }
+
+    .sso-login {
+        flex: 1;
+        width: 100%;
+
+        button {
+            width: 100%;
+            flex: 1;
+            border-radius: 24px;
+            height: 40px;
+            color: var(--kma-primary);
+            background: var(--kma-default);
+        }
+    }
+
+    @media (min-width: 600px) and (max-width: 959px){
+        margin: 48px 25px 25px !important;
+    }
+}
+
+::ng-deep .mat-card {
+    padding: 0px !important;
+}

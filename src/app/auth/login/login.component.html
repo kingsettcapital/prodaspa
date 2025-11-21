@@ -1,0 +1,8 @@
+<mat-card class="login-card">
+  <div class="sso-login">
+    <button mat-flat-button color="primary" type="button" (click)="loginSSO()">
+      Sign in with SSO
+    </button>
+  </div>
+  <div *ngIf="error" class="error-message">{{ error }}</div>
+</mat-card>

@@ -1,1 +1,17 @@
-<app-file-download></app-file-download>
+<div *ngIf="ssoInProgress" class="sso-container">
+    <div class="sso-content">
+        <img src="assets/kingsett-logo.svg" alt="logo" class="sso-logo" (load)="imageLoaded = true"
+            [hidden]="!imageLoaded">
+        <div class="loader-wrapper">
+            <div class="loader-content">
+                <mat-spinner></mat-spinner>
+                <span>
+                    {{ msalAuth.ssoEvent === 'logout'
+                    ? 'Signing you out...'
+                    : 'Signing you in...' }}
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+<router-outlet *ngIf="!ssoInProgress"></router-outlet>
