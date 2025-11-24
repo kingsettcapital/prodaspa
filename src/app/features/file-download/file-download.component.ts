@@ -1,8 +1,25 @@
 import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
-import { FormGroup, FormControl, Validators } from '@angular/forms';
+import { FormGroup, FormControl, Validators, AbstractControl, ValidationErrors } from '@angular/forms';
 import { saveAs } from 'file-saver';
 import { FileService } from 'src/app/core/services/file.service';
 
+// 🛑 1. DEFINE THE CUSTOM VALIDATOR FUNCTION HERE (OUTSIDE THE CLASS)
+const isFirstOfMonth = (control: AbstractControl): ValidationErrors | null => {
+  const dateValue = control.value;
+
+  if (!dateValue) {
+    return null; 
+  }
+
+  const date = new Date(dateValue);
+
+  // Check if the date is valid and the day is the 1st
+  if (isNaN(date.getTime()) || date.getDate() !== 1) {
+    return { notFirstOfMonth: true }; // Invalid
+  }
+  
+  return null; // Valid
+};
 @Component({
   selector: 'app-file-download',
   standalone: false,
@@ -12,9 +29,11 @@ import { FileService } from 'src/app/core/services/file.service';
 export class FileDownloadComponent implements OnInit {
   @ViewChild('dateInput') dateInput!: ElementRef;
   reportForm = new FormGroup({
-    rentRollDate: new FormControl('', [Validators.required]),
+    rentRollDate: new FormControl('', [Validators.required,
+      isFirstOfMonth
+    ]),
     projectName: new FormControl('', [
-      Validators.required,                    // Now required
+      //Validators.required,                    // Now required
       Validators.pattern(/^([a-zA-Z\s])+$/)    // Improved pattern
     ]),
   });
@@ -36,11 +55,11 @@ export class FileDownloadComponent implements OnInit {
       this.isDownloading = true;
       this.downloadMessage = 'Generating file...';
       const date = this.reportForm.value.rentRollDate;
-      const projectName = this.reportForm.value.projectName;
+      const projectName = this.reportForm.value.projectName ?? null;
 
-      this.fileService.downloadReport(date!, projectName!).subscribe({
+      this.fileService.downloadReport(date!, projectName).subscribe({
         next: (response: any) => {
-          const projectPart = projectName && projectName.length > 0 ? projectName : 'AllProjects';
+          const projectPart = (projectName && projectName.length > 0) ? projectName : 'AllProjects';
           const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // yyyyMMdd format
           const fileName = `RR_${projectPart}_${datePart}.xlsx`;
           saveAs(response.body, fileName);

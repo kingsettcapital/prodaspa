@@ -22,7 +22,7 @@
           </mat-form-field>
           <div class="error-message"
             *ngIf="reportForm.get('rentRollDate')?.invalid && (reportForm.get('rentRollDate')?.dirty || reportForm.get('rentRollDate')?.touched)">
-            Date is required.
+            Date is required, accepts only 1st day of the month.
           </div>
         </div>
 
@@ -36,9 +36,9 @@
             <span *ngIf="reportForm.get('projectName')?.hasError('pattern')">
               Only letters and spaces are allowed
             </span>
-            <span *ngIf="reportForm.get('projectName')?.hasError('required')">
+            <!-- <span *ngIf="reportForm.get('projectName')?.hasError('required')">
               Project name is required
-            </span>
+            </span> -->
           </div>
         </div>
 
