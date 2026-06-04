@@ -14,7 +14,7 @@ export class ValidationApiService {
   private readonly http = inject(HttpClient);
 
   private defaultHeaders(): HttpHeaders {
-    let headers = new HttpHeaders();
+    let headers = new HttpHeaders().set('X-Api-Key', environment.apiKey);
     if (!environment.production) {
       headers = headers.set('ngrok-skip-browser-warning', '69420');
     }
