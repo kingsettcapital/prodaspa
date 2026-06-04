@@ -3,6 +3,7 @@ export const environment = {
   production: false,
   apiKey: "118dab24-8387-40e6-865d-04f55d4aaaa9",
   apiUrl: 'https://prodagatewaydev.kingsettcapital.com/api',
+  validationApiUrl: 'http://localhost:5174/api',
   appName: 'KS DSP SPA',
   version: '1.0.0',
   azureConfig: {

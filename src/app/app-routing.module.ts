@@ -19,6 +19,10 @@ const routes: Routes = [
         path: '',
         loadChildren: () => import('./features/features.module').then(m => m.FeaturesModule),
       },
+      {
+        path: 'validate',
+        loadChildren: () => import('./features/validation/validation.module').then(m => m.ValidationModule),
+      },
     ]
   },
   { path: '**', redirectTo: '' }

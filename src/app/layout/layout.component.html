@@ -41,9 +41,17 @@
         </div>
       </div>
 
-      <div class="nav-links hide-on-mobile">
-        <a *ngFor="let item of navItems; index as i" [routerLink]="item.route"
-          routerLinkActive="active">{{ item.label }}</a>
+      <div class="nav-links hide-on-mobile header-tabs">
+        <nav mat-tab-nav-bar class="header-tab-nav" [disablePagination]="true">
+          <a
+            mat-tab-link
+            *ngFor="let tab of headerTabs"
+            [routerLink]="tab.path"
+            [active]="isHeaderTabActive(tab.path)"
+          >
+            {{ tab.label }}
+          </a>
+        </nav>
       </div>
 
       <div class="right-section">
