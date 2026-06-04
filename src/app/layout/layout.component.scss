@@ -196,8 +196,9 @@
     .left-section {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      width: 50%;
+      justify-content: flex-start;
+      flex: 1;
+      min-width: 0;
       gap: 15%;
 
       .logo {
@@ -211,34 +212,29 @@
 
     .nav-links {
       display: flex;
-      gap: 20px;
-      font-size: 16px;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      min-width: 0;
+    }
 
-      a {
-        color: var(--kma-default);
-        text-transform: none;
-        font-weight: 400;
-        text-decoration: none;
-        padding: 6px 12px;
-        border-radius: 8px;
-        transition: all 0.2s ease-in-out;
+    .header-tabs {
+      width: 100%;
+      max-width: 420px;
+      margin: 0 auto;
+    }
 
-        &:hover,
-        &.active {
-          color: var(--kma-default);
-          background: var(--kma-glass-bg);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-          border-radius: 6px;
-          font-weight: 500;
-        }
-      }
+    .header-tab-nav {
+      background: transparent;
+      border-bottom: none;
     }
 
     .right-section {
       display: flex;
       align-items: center;
       gap: 10px;
-      width: 50%;
+      flex: 1;
+      min-width: 0;
       justify-content: flex-end;
 
       button.mat-button {
@@ -329,6 +325,35 @@
     @include breakpoint-lt(sm) {
       padding: 2px;
     }
+  }
+}
+
+::ng-deep .top-toolbar .header-tab-nav {
+  .mat-tab-link {
+    min-width: 120px;
+    height: 48px;
+    padding: 0 20px;
+    color: var(--kma-default);
+    opacity: 0.85;
+    font-size: 15px;
+    font-weight: 500;
+    text-transform: none;
+
+    &:hover {
+      opacity: 1;
+      background: var(--kma-glass-bg);
+    }
+  }
+
+  .mat-tab-link.mat-tab-label-active {
+    opacity: 1;
+    color: var(--kma-default);
+  }
+
+  .mat-ink-bar {
+    background-color: var(--kma-default);
+    height: 3px;
+    border-radius: 2px 2px 0 0;
   }
 }
 
