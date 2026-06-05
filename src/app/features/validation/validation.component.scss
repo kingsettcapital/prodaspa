@@ -6,12 +6,15 @@ $text-muted: #6b7280;
 $flagged-color: #b91c1c;
 $suggested-color: #b45309;
 $correct-color: #15803d;
+$new-color: #1d4ed8;
 $flagged-border: #ef4444;
 $suggested-border: #fbbf24;
 $correct-border: #22c55e;
+$new-border: #3b82f6;
 $flagged-hover: #fef2f2;
 $suggested-hover: #fffbeb;
 $correct-hover: #f0fdf4;
+$new-hover: #eff6ff;
 $primary-btn: #1f2937;
 $primary-btn-hover: #374151;
 $primary-btn-disabled: #d1d5db;
@@ -249,9 +252,18 @@ $upload-drag-bg: #eff6ff;
     white-space: nowrap;
   }
 
-  &__summary-sep {
+  &__summary-sep,
+  &__summary-dot {
     color: #9ca3af;
     margin: 0 0.25rem;
+  }
+
+  &__summary-dot {
+    margin: 0;
+  }
+
+  &__summary-correct {
+    color: $correct-color;
   }
 
   &__corrections-badge {
@@ -355,6 +367,19 @@ $upload-drag-bg: #eff6ff;
     font-size: 0.8125rem;
     font-style: italic;
     color: $text-muted;
+  }
+}
+
+.bucket__header.bucket-header--new {
+  color: $new-color;
+  border-left: 4px solid $new-border;
+
+  .bucket__chevron {
+    color: $new-color;
+  }
+
+  &:hover {
+    background: $new-hover;
   }
 }
 

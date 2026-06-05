@@ -1,5 +1,5 @@
-export type ClassifyStatus = 'correct' | 'suggested' | 'flagged';
-export type FrontendStatus = 'excluded' | 'suggested' | 'flagged';
+export type ClassifyStatus = 'correct' | 'suggested' | 'flagged' | 'new';
+export type FrontendStatus = 'excluded' | 'suggested' | 'flagged' | 'new';
 export type MatchSource = 'MasterList' | 'Normalisation' | 'AcceptedAsIs' | null;
 export type CorrectionChangeType = 'AcceptedSuggestion' | 'ManualOverride' | 'AcceptedAsIs';
 
@@ -24,6 +24,7 @@ export interface ValidationResponse {
   excluded: number;
   suggested: number;
   flagged: number;
+  new: number;
   results: ValidationResult[];
 }
 
@@ -54,6 +55,7 @@ export interface ParentValidationResponse {
   excluded: number;
   suggested: number;
   flagged: number;
+  new: number;
   results: ParentValidationResult[];
 }
 

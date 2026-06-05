@@ -5,7 +5,7 @@ import {
 } from './models/validation.models';
 
 export type FieldType = 'tenant' | 'parent';
-export type BucketKey = 'flagged' | 'suggested' | 'excluded';
+export type BucketKey = 'new' | 'flagged' | 'suggested' | 'excluded';
 export type ValidationRow = ValidationResult | ParentValidationResult;
 
 @Component({
@@ -88,7 +88,7 @@ export class ValidationResultTableComponent {
   }
 
   isAcceptAsIs(row: ValidationRow): boolean {
-    return this.bucket === 'flagged' && row.reason === 'No suggestion';
+    return row.status?.toLowerCase() === 'new';
   }
 
   isBlankVacant(row: ValidationRow): boolean {
@@ -112,17 +112,13 @@ export class ValidationResultTableComponent {
     if (this.bucket === 'suggested' && this.hasSuggestion(row)) {
       return (row.suggestion ?? row.suggestedName) as string;
     }
-    if (this.bucket === 'flagged' && this.isAcceptAsIs(row)) {
+    if (this.bucket === 'new' && this.isAcceptAsIs(row)) {
       return row.tenantName;
     }
     if (this.bucket === 'flagged' && this.hasSuggestion(row)) {
       return (row.suggestion ?? row.suggestedName) as string;
     }
     return '—';
-  }
-
-  reasonDisplay(row: ValidationRow): string {
-    return row.reason === 'No suggestion' ? 'New Name' : row.reason;
   }
 
   confidenceDisplay(row: ValidationRow): string {
@@ -138,6 +134,9 @@ export class ValidationResultTableComponent {
   rowBorderClass(row: ValidationRow): string {
     if (this.bucket === 'excluded' || this.isAccepted(row)) {
       return 'row-border--correct';
+    }
+    if (this.bucket === 'new') {
+      return 'row-border--new';
     }
     if (this.bucket === 'flagged') {
       return 'row-border--flagged';

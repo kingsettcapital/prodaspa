@@ -90,6 +90,7 @@ export class ValidationComponent implements OnDestroy {
   ] as const;
 
   readonly statusBuckets: StatusBucketConfig[] = [
+    { key: 'new', label: '🆕 New Names', headerClass: 'bucket-header--new' },
     { key: 'flagged', label: '🚨 Flagged', headerClass: 'bucket-header--flagged' },
     { key: 'suggested', label: '⚠️ Suggested', headerClass: 'bucket-header--suggested' },
     { key: 'excluded', label: '✅ Correct', headerClass: 'bucket-header--correct' }
@@ -363,7 +364,7 @@ export class ValidationComponent implements OnDestroy {
   }
 
   private isAcceptAsIsRow(row: ValidationRow): boolean {
-    return row.status === 'flagged' && row.reason === 'No suggestion';
+    return row.status?.toLowerCase() === 'new';
   }
 
   applyAllSuggestions(fileIndex: number, fieldType: FieldType, event: Event): void {
@@ -385,17 +386,13 @@ export class ValidationComponent implements OnDestroy {
   }
 
   acceptAsIsEligibleCount(fileIndex: number, fieldType: FieldType): number {
-    return this.rowsForBucket(fileIndex, fieldType, 'flagged').filter(row =>
-      this.isAcceptAsIsRow(row)
-    ).length;
+    return this.rowsForBucket(fileIndex, fieldType, 'new').length;
   }
 
   acceptAllAsIs(fileIndex: number, fieldType: FieldType, event: Event): void {
     event.stopPropagation();
-    for (const row of this.rowsForBucket(fileIndex, fieldType, 'flagged')) {
-      if (this.isAcceptAsIsRow(row)) {
-        this.acceptRow(fileIndex, fieldType, row);
-      }
+    for (const row of this.rowsForBucket(fileIndex, fieldType, 'new')) {
+      this.acceptRow(fileIndex, fieldType, row);
     }
   }
 

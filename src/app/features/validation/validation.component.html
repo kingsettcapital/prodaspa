@@ -75,10 +75,26 @@
               {{ acceptedCount(fileIndex) }} corrections ready
             </span>
             <span class="file-card__summary">
-              Tenant {{ tenantSummary(fileIndex) }}
-              <ng-container *ngIf="hasParentResponse(fileIndex)">
+              <ng-container *ngIf="result.response as tenant">
+                Tenant
+                {{ tenant.new }} new
+                <span class="file-card__summary-dot"> · </span>
+                {{ tenant.flagged }} flagged
+                <span class="file-card__summary-dot"> · </span>
+                {{ tenant.suggested }} suggested
+                <span class="file-card__summary-dot"> · </span>
+                <span class="file-card__summary-correct">{{ tenant.excluded }} correct</span>
+              </ng-container>
+              <ng-container *ngIf="result.parentResponse as parent">
                 <span class="file-card__summary-sep">|</span>
-                Parent {{ parentSummary(fileIndex) }}
+                Parent
+                {{ parent.new }} new
+                <span class="file-card__summary-dot"> · </span>
+                {{ parent.flagged }} flagged
+                <span class="file-card__summary-dot"> · </span>
+                {{ parent.suggested }} suggested
+                <span class="file-card__summary-dot"> · </span>
+                <span class="file-card__summary-correct">{{ parent.excluded }} correct</span>
               </ng-container>
             </span>
           </div>
@@ -132,7 +148,7 @@
                   </div>
                   <div
                     class="bucket__header-actions"
-                    *ngIf="bucket.key === 'flagged'"
+                    *ngIf="bucket.key === 'new'"
                     (click)="$event.stopPropagation()"
                   >
                     <button
@@ -143,6 +159,12 @@
                     >
                       Accept All As-Is
                     </button>
+                  </div>
+                  <div
+                    class="bucket__header-actions"
+                    *ngIf="bucket.key === 'flagged'"
+                    (click)="$event.stopPropagation()"
+                  >
                     <button
                       type="button"
                       class="bucket-btn bucket-btn--red"
