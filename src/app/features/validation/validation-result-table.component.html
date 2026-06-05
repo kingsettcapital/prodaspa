@@ -21,7 +21,7 @@
       <td>{{ row.tenantName }}</td>
       <td>{{ suggestedDisplay(row) }}</td>
       <td>{{ confidenceDisplay(row) }}</td>
-      <td>{{ row.reason }}</td>
+      <td>{{ reasonDisplay(row) }}</td>
       <td *ngIf="showActionColumn" class="action-cell">
         <div class="action-cell__inner" (click)="onActionClick($event)">
           <ng-container *ngIf="isAccepted(row); else actionPending">

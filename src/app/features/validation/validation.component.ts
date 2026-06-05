@@ -71,6 +71,13 @@ export class ValidationComponent implements OnDestroy {
   corrections = new Map<string, StoredCorrectionRecord>();
   downloadProgressByFile = new Map<number, DownloadChecklistState>();
 
+  /** FIX 3: bump when corrections mutate so table inputs reuse stable Map/Set refs. */
+  private correctionsVersion = 0;
+  private readonly correctionMapCache = new Map<string, Map<string, string>>();
+  private readonly correctionMapCacheVersion = new Map<string, number>();
+  private readonly acceptedKeysCache = new Map<string, Set<string>>();
+  private readonly acceptedKeysCacheVersion = new Map<string, number>();
+
   showHistory = false;
   history: ValidationHistory[] = [];
   historyLoading = false;
@@ -144,6 +151,7 @@ export class ValidationComponent implements OnDestroy {
     this.expandedSections = new Set<string>();
     this.corrections = new Map<string, StoredCorrectionRecord>();
     this.downloadProgressByFile = new Map<number, DownloadChecklistState>();
+    this.bumpCorrectionsCache();
   }
 
   ngOnDestroy(): void {
@@ -282,6 +290,15 @@ export class ValidationComponent implements OnDestroy {
   }
 
   tableAcceptedKeys(fileIndex: number, fieldType: FieldType): Set<string> {
+    const cacheKey = this.tableCacheKey(fileIndex, fieldType);
+    const cachedVersion = this.acceptedKeysCacheVersion.get(cacheKey);
+    if (cachedVersion === this.correctionsVersion) {
+      const cached = this.acceptedKeysCache.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
     const prefix = this.tableKeyPrefix(fileIndex, fieldType);
     const keys = new Set<string>();
     this.corrections.forEach((_, key) => {
@@ -289,10 +306,21 @@ export class ValidationComponent implements OnDestroy {
         keys.add(key.slice(prefix.length));
       }
     });
+    this.acceptedKeysCache.set(cacheKey, keys);
+    this.acceptedKeysCacheVersion.set(cacheKey, this.correctionsVersion);
     return keys;
   }
 
   tableCorrectionMap(fileIndex: number, fieldType: FieldType): Map<string, string> {
+    const cacheKey = this.tableCacheKey(fileIndex, fieldType);
+    const cachedVersion = this.correctionMapCacheVersion.get(cacheKey);
+    if (cachedVersion === this.correctionsVersion) {
+      const cached = this.correctionMapCache.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
     const prefix = this.tableKeyPrefix(fileIndex, fieldType);
     const map = new Map<string, string>();
     this.corrections.forEach((record, key) => {
@@ -300,7 +328,17 @@ export class ValidationComponent implements OnDestroy {
         map.set(key.slice(prefix.length), record.correctedName);
       }
     });
+    this.correctionMapCache.set(cacheKey, map);
+    this.correctionMapCacheVersion.set(cacheKey, this.correctionsVersion);
     return map;
+  }
+
+  private tableCacheKey(fileIndex: number, fieldType: FieldType): string {
+    return `${fileIndex}|${fieldType}`;
+  }
+
+  private bumpCorrectionsCache(): void {
+    this.correctionsVersion++;
   }
 
   onTableAccept(fileIndex: number, fieldType: FieldType, row: ValidationRow): void {
@@ -402,6 +440,7 @@ export class ValidationComponent implements OnDestroy {
     const map = new Map(this.corrections);
     map.delete(this.correctionKey(fileIndex, fieldType, row));
     this.corrections = map;
+    this.bumpCorrectionsCache();
   }
 
   private correctionKey(fileIndex: number, fieldType: FieldType, row: ValidationRow): string {
@@ -437,6 +476,7 @@ export class ValidationComponent implements OnDestroy {
     };
     map.set(this.correctionKey(fileIndex, fieldType, row), record);
     this.corrections = map;
+    this.bumpCorrectionsCache();
   }
 
   downloadProgress(fileIndex: number): DownloadChecklistState | undefined {

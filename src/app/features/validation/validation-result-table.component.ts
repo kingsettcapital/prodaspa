@@ -121,6 +121,10 @@ export class ValidationResultTableComponent {
     return '—';
   }
 
+  reasonDisplay(row: ValidationRow): string {
+    return row.reason === 'No suggestion' ? 'New Name' : row.reason;
+  }
+
   confidenceDisplay(row: ValidationRow): string {
     if (this.bucket === 'excluded') {
       return row.confidence != null ? `${row.confidence}%` : '100%';

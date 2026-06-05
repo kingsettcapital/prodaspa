@@ -6,6 +6,9 @@ $text-muted: #6b7280;
 $flagged-color: #b91c1c;
 $suggested-color: #b45309;
 $correct-color: #15803d;
+$flagged-border: #ef4444;
+$suggested-border: #fbbf24;
+$correct-border: #22c55e;
 $flagged-hover: #fef2f2;
 $suggested-hover: #fffbeb;
 $correct-hover: #f0fdf4;
@@ -357,6 +360,11 @@ $upload-drag-bg: #eff6ff;
 
 .bucket__header.bucket-header--flagged {
   color: $flagged-color;
+  border-left: 4px solid $flagged-border;
+
+  .bucket__chevron {
+    color: $flagged-color;
+  }
 
   &:hover {
     background: $flagged-hover;
@@ -365,6 +373,11 @@ $upload-drag-bg: #eff6ff;
 
 .bucket__header.bucket-header--suggested {
   color: $suggested-color;
+  border-left: 4px solid $suggested-border;
+
+  .bucket__chevron {
+    color: $suggested-color;
+  }
 
   &:hover {
     background: $suggested-hover;
@@ -373,6 +386,11 @@ $upload-drag-bg: #eff6ff;
 
 .bucket__header.bucket-header--correct {
   color: $correct-color;
+  border-left: 4px solid $correct-border;
+
+  .bucket__chevron {
+    color: $correct-color;
+  }
 
   &:hover {
     background: $correct-hover;
