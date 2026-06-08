@@ -2,6 +2,7 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { ValidationComponent } from './validation.component';
 import { ValidationResultTableComponent } from './validation-result-table.component';
+import { OverridePopoverPanelComponent } from './override-popover-panel.component';
 import { SharedModule } from '../../shared/shared.module';
 
 const routes: Routes = [
@@ -11,7 +12,8 @@ const routes: Routes = [
 @NgModule({
   declarations: [
     ValidationComponent,
-    ValidationResultTableComponent
+    ValidationResultTableComponent,
+    OverridePopoverPanelComponent
   ],
   imports: [
     SharedModule,

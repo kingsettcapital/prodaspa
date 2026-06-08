@@ -8,6 +8,13 @@ export type FieldType = 'tenant' | 'parent';
 export type BucketKey = 'new' | 'flagged' | 'suggested' | 'excluded';
 export type ValidationRow = ValidationResult | ParentValidationResult;
 
+export interface OverridePopoverRequest {
+  row: ValidationRow;
+  top: number;
+  left: number;
+  placeholder: string;
+}
+
 @Component({
   selector: 'app-validation-result-table',
   templateUrl: './validation-result-table.component.html',
@@ -24,6 +31,7 @@ export class ValidationResultTableComponent {
   @Output() accept = new EventEmitter<ValidationRow>();
   @Output() manual = new EventEmitter<{ row: ValidationRow; value: string }>();
   @Output() clear = new EventEmitter<ValidationRow>();
+  @Output() overrideRequest = new EventEmitter<OverridePopoverRequest>();
 
   get showActionColumn(): boolean {
     return this.bucket !== 'excluded';
@@ -102,6 +110,22 @@ export class ValidationResultTableComponent {
     return this.hasSuggestion(row) || this.isAcceptAsIs(row);
   }
 
+  overrideTriggerLabel(row: ValidationRow): string {
+    return this.showAcceptTick(row) ? 'Or type override' : 'Correct name';
+  }
+
+  onOverrideClick(event: MouseEvent, row: ValidationRow): void {
+    event.stopPropagation();
+    const trigger = event.currentTarget as HTMLElement;
+    const rect = trigger.getBoundingClientRect();
+    this.overrideRequest.emit({
+      row,
+      top: rect.bottom + 4,
+      left: rect.left,
+      placeholder: this.overrideTriggerLabel(row)
+    });
+  }
+
   suggestedDisplay(row: ValidationRow): string {
     if (this.bucket === 'excluded') {
       if (this.hasSuggestion(row)) {
@@ -144,9 +168,10 @@ export class ValidationResultTableComponent {
     return 'row-border--suggested';
   }
 
-  onManualBlur(row: ValidationRow, event: Event): void {
-    const value = (event.target as HTMLInputElement).value;
-    this.manual.emit({ row, value });
+  onAcceptMouseDown(event: MouseEvent, row: ValidationRow): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.accept.emit(row);
   }
 
   onActionClick(event: Event): void {

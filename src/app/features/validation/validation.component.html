@@ -141,7 +141,7 @@
                     <button
                       type="button"
                       class="bucket-btn bucket-btn--amber"
-                      (click)="applyAllSuggestions(fileIndex, fieldGroup.type, $event)"
+                      (click)="requestBulkAction('apply-all', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
                     >
                       Apply All Suggestions
                     </button>
@@ -155,7 +155,7 @@
                       type="button"
                       class="bucket-btn bucket-btn--green"
                       [disabled]="acceptAsIsEligibleCount(fileIndex, fieldGroup.type) === 0"
-                      (click)="acceptAllAsIs(fileIndex, fieldGroup.type, $event)"
+                      (click)="requestBulkAction('accept-as-is', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
                     >
                       Accept All As-Is
                     </button>
@@ -168,7 +168,7 @@
                     <button
                       type="button"
                       class="bucket-btn bucket-btn--red"
-                      (click)="standardiseAll(fileIndex, fieldGroup.type, $event)"
+                      (click)="requestBulkAction('standardise', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
                     >
                       Standardise All
                     </button>
@@ -187,6 +187,7 @@
                     [acceptedKeys]="tableAcceptedKeys(fileIndex, fieldGroup.type)"
                     [correctionByKey]="tableCorrectionMap(fileIndex, fieldGroup.type)"
                     (accept)="onTableAccept(fileIndex, fieldGroup.type, $event)"
+                    (overrideRequest)="onTableOverrideRequest(fileIndex, fieldGroup.type, $event)"
                     (manual)="onTableManual(fileIndex, fieldGroup.type, $event)"
                     (clear)="onTableClear(fileIndex, fieldGroup.type, $event)"
                   ></app-validation-result-table>
@@ -329,5 +330,64 @@
         </div>
       </div>
     </section>
+  </div>
+
+  <div class="override-popover-layer" *ngIf="pendingOverride as popover">
+    <button
+      type="button"
+      class="override-popover-layer__backdrop"
+      aria-label="Close override editor"
+      (click)="cancelOverride()"
+    ></button>
+    <div
+      class="override-popover-layer__panel"
+      [style.top.px]="popover.top"
+      [style.left.px]="popover.left"
+      (click)="$event.stopPropagation()"
+    >
+      <app-override-popover-panel
+        [originalName]="popover.originalName"
+        [initialValue]="popover.initialValue"
+        [placeholder]="popover.placeholder"
+        (save)="onOverrideSave($event)"
+        (cancel)="cancelOverride()"
+      ></app-override-popover-panel>
+    </div>
+  </div>
+
+  <div
+    class="confirm-overlay"
+    *ngIf="pendingBulkAction"
+    (click)="cancelBulkAction()"
+  >
+    <div
+      class="confirm-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="bulk-confirm-title"
+      (click)="$event.stopPropagation()"
+    >
+      <h2 id="bulk-confirm-title" class="confirm-dialog__title">
+        Are you sure you want to {{ bulkConfirmTitle }}?
+      </h2>
+      <p class="confirm-dialog__description">{{ bulkConfirmDescription }}</p>
+      <div class="confirm-dialog__actions">
+        <button
+          type="button"
+          class="confirm-dialog__btn confirm-dialog__btn--cancel"
+          (click)="cancelBulkAction()"
+        >
+          No
+        </button>
+        <button
+          type="button"
+          class="confirm-dialog__btn confirm-dialog__btn--confirm"
+          [ngClass]="bulkConfirmClass"
+          (click)="confirmBulkAction()"
+        >
+          Yes
+        </button>
+      </div>
+    </div>
   </div>
 </div>

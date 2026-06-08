@@ -422,6 +422,128 @@ $upload-drag-bg: #eff6ff;
   }
 }
 
+.override-popover-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  pointer-events: none;
+
+  &__backdrop {
+    position: absolute;
+    inset: 0;
+    border: none;
+    padding: 0;
+    margin: 0;
+    background: rgba(17, 24, 39, 0.2);
+    cursor: default;
+    pointer-events: auto;
+  }
+
+  &__panel {
+    position: fixed;
+    pointer-events: auto;
+  }
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(17, 24, 39, 0.45);
+}
+
+.confirm-dialog {
+  width: 100%;
+  max-width: 28rem;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  background: #fff;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+
+  &__title {
+    margin: 0 0 0.75rem;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: $text-primary;
+    line-height: 1.4;
+  }
+
+  &__description {
+    margin: 0 0 1.25rem;
+    font-size: 0.9375rem;
+    color: $text-secondary;
+    line-height: 1.5;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+
+  &__btn {
+    border-radius: 0.375rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+
+    &--cancel {
+      border: 1px solid $card-border;
+      background: #fff;
+      color: $text-secondary;
+
+      &:hover {
+        background: $page-bg;
+      }
+    }
+
+    &--confirm {
+      border: 1px solid $primary-btn;
+      background: $primary-btn;
+      color: #fff;
+
+      &:hover {
+        background: $primary-btn-hover;
+      }
+    }
+
+    &--amber {
+      border-color: $suggested-border;
+      background: $suggested-color;
+      color: #fff;
+
+      &:hover {
+        background: darken($suggested-color, 6%);
+      }
+    }
+
+    &--green {
+      border-color: $correct-border;
+      background: $correct-color;
+      color: #fff;
+
+      &:hover {
+        background: darken($correct-color, 6%);
+      }
+    }
+
+    &--red {
+      border-color: $flagged-border;
+      background: $flagged-color;
+      color: #fff;
+
+      &:hover {
+        background: darken($flagged-color, 6%);
+      }
+    }
+  }
+}
+
 .bucket-btn {
   border-radius: 0.25rem;
   padding: 0.125rem 0.5rem;

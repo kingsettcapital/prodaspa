@@ -1,4 +1,4 @@
-import { Component, OnDestroy } from '@angular/core';
+import { Component, HostListener, OnDestroy } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ValidationApiService } from './services/validation-api.service';
 import { NotificationService } from 'src/app/core/services/notification.service';
@@ -11,7 +11,23 @@ import {
   ValidationHistory,
   ValidationResult
 } from './models/validation.models';
-import { BucketKey, FieldType, ValidationRow } from './validation-result-table.component';
+import {
+  BucketKey,
+  FieldType,
+  OverridePopoverRequest,
+  ValidationRow
+} from './validation-result-table.component';
+
+interface PendingOverride {
+  fileIndex: number;
+  fieldType: FieldType;
+  row: ValidationRow;
+  top: number;
+  left: number;
+  originalName: string;
+  initialValue: string;
+  placeholder: string;
+}
 
 export interface StoredCorrectionRecord {
   fieldType: 'Tenant' | 'Parent';
@@ -37,6 +53,21 @@ interface FieldGroupConfig {
   nameColumnLabel: string;
 }
 
+type BulkActionType = 'apply-all' | 'accept-as-is' | 'standardise';
+
+interface PendingBulkAction {
+  type: BulkActionType;
+  fileIndex: number;
+  fieldType: FieldType;
+  fieldLabel: string;
+}
+
+interface BulkConfirmConfig {
+  label: string;
+  description: (fieldLabel: string) => string;
+  confirmClass: string;
+}
+
 type DownloadStepStatus = 'pending' | 'active' | 'done' | 'failed';
 
 interface DownloadChecklistState {
@@ -54,6 +85,27 @@ interface DownloadChecklistState {
 })
 export class ValidationComponent implements OnDestroy {
   private static readonly DOWNLOAD_STEP_MS = 800;
+
+  private static readonly BULK_CONFIRM_CONFIG: Record<BulkActionType, BulkConfirmConfig> = {
+    'apply-all': {
+      label: 'Apply All Suggestions',
+      description: (fieldLabel) =>
+        `This will accept the suggested name for every row in ${fieldLabel.toLowerCase()} that has a suggestion.`,
+      confirmClass: 'confirm-dialog__btn--amber'
+    },
+    'accept-as-is': {
+      label: 'Accept All As-Is',
+      description: (fieldLabel) =>
+        `This will keep every new name in ${fieldLabel.toLowerCase()} exactly as it appears in your file, with no changes.`,
+      confirmClass: 'confirm-dialog__btn--green'
+    },
+    standardise: {
+      label: 'Standardise All',
+      description: (fieldLabel) =>
+        `This will apply the standardised spelling for every flagged name in ${fieldLabel.toLowerCase()} that only needs formatting fixes.`,
+      confirmClass: 'confirm-dialog__btn--red'
+    }
+  };
 
   private readonly downloadTimers = new Map<number, number[]>();
   private readonly downloadSubscriptions = new Map<number, Subscription>();
@@ -77,11 +129,14 @@ export class ValidationComponent implements OnDestroy {
   private readonly correctionMapCacheVersion = new Map<string, number>();
   private readonly acceptedKeysCache = new Map<string, Set<string>>();
   private readonly acceptedKeysCacheVersion = new Map<string, number>();
+  private readonly rowsForBucketCache = new Map<string, ValidationRow[]>();
 
   showHistory = false;
   history: ValidationHistory[] = [];
   historyLoading = false;
   historyError = '';
+  pendingBulkAction: PendingBulkAction | null = null;
+  pendingOverride: PendingOverride | null = null;
 
   readonly downloadStepLabels = [
     'Applying your corrections',
@@ -153,6 +208,7 @@ export class ValidationComponent implements OnDestroy {
     this.corrections = new Map<string, StoredCorrectionRecord>();
     this.downloadProgressByFile = new Map<number, DownloadChecklistState>();
     this.bumpCorrectionsCache();
+    this.clearRowsForBucketCache();
   }
 
   ngOnDestroy(): void {
@@ -246,17 +302,32 @@ export class ValidationComponent implements OnDestroy {
   }
 
   rowsForBucket(fileIndex: number, fieldType: FieldType, bucket: BucketKey): ValidationRow[] {
+    const cacheKey = `${fileIndex}|${fieldType}|${bucket}`;
+    const cached = this.rowsForBucketCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const result = this.batchResults[fileIndex];
     if (!result) {
       return [];
     }
+
+    let rows: ValidationRow[];
     if (fieldType === 'tenant') {
-      return result.response.results.filter(r => r.status === bucket);
+      rows = result.response.results.filter(r => r.status === bucket);
+    } else if (!result.parentResponse) {
+      rows = [];
+    } else {
+      rows = result.parentResponse.results.filter(r => r.status === bucket);
     }
-    if (!result.parentResponse) {
-      return [];
-    }
-    return result.parentResponse.results.filter(r => r.status === bucket);
+
+    this.rowsForBucketCache.set(cacheKey, rows);
+    return rows;
+  }
+
+  private clearRowsForBucketCache(): void {
+    this.rowsForBucketCache.clear();
   }
 
   bucketCount(fileIndex: number, fieldType: FieldType, bucket: BucketKey): number {
@@ -343,7 +414,39 @@ export class ValidationComponent implements OnDestroy {
   }
 
   onTableAccept(fileIndex: number, fieldType: FieldType, row: ValidationRow): void {
+    this.pendingOverride = null;
     this.acceptRow(fileIndex, fieldType, row);
+  }
+
+  onTableOverrideRequest(
+    fileIndex: number,
+    fieldType: FieldType,
+    request: OverridePopoverRequest
+  ): void {
+    const correctionMap = this.tableCorrectionMap(fileIndex, fieldType);
+    this.pendingOverride = {
+      fileIndex,
+      fieldType,
+      row: request.row,
+      top: request.top,
+      left: request.left,
+      originalName: request.row.tenantName,
+      initialValue: correctionMap.get(this.tableRowKey(fieldType, request.row)) ?? '',
+      placeholder: request.placeholder
+    };
+  }
+
+  onOverrideSave(value: string): void {
+    if (!this.pendingOverride) {
+      return;
+    }
+    const { fileIndex, fieldType, row } = this.pendingOverride;
+    this.setManualCorrection(fileIndex, fieldType, row, value);
+    this.pendingOverride = null;
+  }
+
+  cancelOverride(): void {
+    this.pendingOverride = null;
   }
 
   onTableManual(fileIndex: number, fieldType: FieldType, event: { row: ValidationRow; value: string }): void {
@@ -367,8 +470,89 @@ export class ValidationComponent implements OnDestroy {
     return row.status?.toLowerCase() === 'new';
   }
 
-  applyAllSuggestions(fileIndex: number, fieldType: FieldType, event: Event): void {
+  get bulkConfirmTitle(): string {
+    if (!this.pendingBulkAction) {
+      return '';
+    }
+    return ValidationComponent.BULK_CONFIRM_CONFIG[this.pendingBulkAction.type].label;
+  }
+
+  get bulkConfirmDescription(): string {
+    if (!this.pendingBulkAction) {
+      return '';
+    }
+    const config = ValidationComponent.BULK_CONFIRM_CONFIG[this.pendingBulkAction.type];
+    return config.description(this.pendingBulkAction.fieldLabel);
+  }
+
+  get bulkConfirmClass(): string {
+    if (!this.pendingBulkAction) {
+      return '';
+    }
+    return ValidationComponent.BULK_CONFIRM_CONFIG[this.pendingBulkAction.type].confirmClass;
+  }
+
+  requestBulkAction(
+    type: BulkActionType,
+    fileIndex: number,
+    fieldType: FieldType,
+    fieldLabel: string,
+    event: Event
+  ): void {
     event.stopPropagation();
+    this.pendingBulkAction = { type, fileIndex, fieldType, fieldLabel };
+  }
+
+  cancelBulkAction(): void {
+    this.pendingBulkAction = null;
+  }
+
+  confirmBulkAction(): void {
+    const pending = this.pendingBulkAction;
+    if (!pending) {
+      return;
+    }
+
+    const { type, fileIndex, fieldType } = pending;
+    this.pendingBulkAction = null;
+
+    switch (type) {
+      case 'apply-all':
+        this.executeApplyAllSuggestions(fileIndex, fieldType);
+        break;
+      case 'accept-as-is':
+        this.executeAcceptAllAsIs(fileIndex, fieldType);
+        break;
+      case 'standardise':
+        this.executeStandardiseAll(fileIndex, fieldType);
+        break;
+    }
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    if (this.pendingBulkAction) {
+      this.cancelBulkAction();
+      return;
+    }
+    if (this.pendingOverride) {
+      this.cancelOverride();
+    }
+  }
+
+  private tableRowKey(fieldType: FieldType, row: ValidationRow): string {
+    if (fieldType === 'tenant') {
+      const t = row as ValidationResult;
+      return `${t.unitId}|${t.tenantName}`;
+    }
+    return row.tenantName;
+  }
+
+  acceptAsIsEligibleCount(fileIndex: number, fieldType: FieldType): number {
+    return this.rowsForBucket(fileIndex, fieldType, 'new').length;
+  }
+
+  private executeApplyAllSuggestions(fileIndex: number, fieldType: FieldType): void {
     for (const row of this.rowsForBucket(fileIndex, fieldType, 'suggested')) {
       if (this.hasSuggestion(row)) {
         this.acceptRow(fileIndex, fieldType, row);
@@ -376,8 +560,7 @@ export class ValidationComponent implements OnDestroy {
     }
   }
 
-  standardiseAll(fileIndex: number, fieldType: FieldType, event: Event): void {
-    event.stopPropagation();
+  private executeStandardiseAll(fileIndex: number, fieldType: FieldType): void {
     for (const row of this.rowsForBucket(fileIndex, fieldType, 'flagged')) {
       if (row.reason === 'Standardisation') {
         this.acceptRow(fileIndex, fieldType, row);
@@ -385,12 +568,7 @@ export class ValidationComponent implements OnDestroy {
     }
   }
 
-  acceptAsIsEligibleCount(fileIndex: number, fieldType: FieldType): number {
-    return this.rowsForBucket(fileIndex, fieldType, 'new').length;
-  }
-
-  acceptAllAsIs(fileIndex: number, fieldType: FieldType, event: Event): void {
-    event.stopPropagation();
+  private executeAcceptAllAsIs(fileIndex: number, fieldType: FieldType): void {
     for (const row of this.rowsForBucket(fileIndex, fieldType, 'new')) {
       this.acceptRow(fileIndex, fieldType, row);
     }

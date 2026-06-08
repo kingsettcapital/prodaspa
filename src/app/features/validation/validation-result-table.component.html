@@ -1,58 +1,59 @@
-<table class="results-table">
-  <thead>
-    <tr>
-      <th>Unit</th>
-      <th>Building</th>
-      <th>{{ nameColumnLabel }}</th>
-      <th>Suggested Name</th>
-      <th>Confidence</th>
-      <th>Reason</th>
-      <th *ngIf="showActionColumn">Action</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr
-      *ngFor="let row of rows; trackBy: trackByRow"
-      [ngClass]="rowBorderClass(row)"
-      [class.row-accepted]="isAccepted(row) && bucket !== 'excluded'"
-    >
-      <td>{{ unitDisplay(row) }}</td>
-      <td>{{ buildingDisplay(row) }}</td>
-      <td>{{ row.tenantName }}</td>
-      <td>{{ suggestedDisplay(row) }}</td>
-      <td>{{ confidenceDisplay(row) }}</td>
-      <td>{{ row.reason }}</td>
-      <td *ngIf="showActionColumn" class="action-cell">
-        <div class="action-cell__inner" (click)="onActionClick($event)">
-          <ng-container *ngIf="isAccepted(row); else actionPending">
-            <span class="action-cell__accepted" title="Accepted correction">
-              ✓ {{ correctionText(row) }}
-            </span>
-            <button type="button" class="action-cell__undo" (click)="clear.emit(row)">
-              Undo
-            </button>
-          </ng-container>
-          <ng-template #actionPending>
-            <button
-              *ngIf="showAcceptTick(row)"
-              type="button"
-              class="action-cell__accept-btn"
-              [title]="isAcceptAsIs(row) ? 'Accept as-is' : 'Accept suggestion'"
-              (click)="accept.emit(row)"
-            >
-              ✓
-            </button>
-            <input
-              type="text"
-              class="action-cell__input"
-              [placeholder]="showAcceptTick(row) ? 'Or type override' : 'Correct name'"
-              [value]="correctionText(row)"
-              (blur)="onManualBlur(row, $event)"
-            />
-          </ng-template>
-        </div>
-      </td>
-    </tr>
-  </tbody>
-</table>
-<p class="results-table__empty" *ngIf="rows.length === 0">No rows in this bucket.</p>
+<table class="results-table">
+  <thead>
+    <tr>
+      <th>Unit</th>
+      <th>Building</th>
+      <th>{{ nameColumnLabel }}</th>
+      <th>Suggested Name</th>
+      <th>Confidence</th>
+      <th>Reason</th>
+      <th *ngIf="showActionColumn">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr
+      *ngFor="let row of rows; trackBy: trackByRow"
+      [ngClass]="rowBorderClass(row)"
+      [class.row-accepted]="isAccepted(row) && bucket !== 'excluded'"
+    >
+      <td>{{ unitDisplay(row) }}</td>
+      <td>{{ buildingDisplay(row) }}</td>
+      <td>{{ row.tenantName }}</td>
+      <td>{{ suggestedDisplay(row) }}</td>
+      <td>{{ confidenceDisplay(row) }}</td>
+      <td>{{ row.reason }}</td>
+      <td *ngIf="showActionColumn" class="action-cell">
+        <div class="action-cell__inner" (click)="onActionClick($event)">
+          <ng-container *ngIf="isAccepted(row); else actionPending">
+            <span class="action-cell__accepted" title="Accepted correction">
+              ✓ {{ correctionText(row) }}
+            </span>
+            <button type="button" class="action-cell__undo" (click)="clear.emit(row)">
+              Undo
+            </button>
+          </ng-container>
+          <ng-template #actionPending>
+            <button
+              *ngIf="showAcceptTick(row)"
+              type="button"
+              class="action-cell__accept-btn"
+              [title]="isAcceptAsIs(row) ? 'Accept as-is' : 'Accept suggestion'"
+              (mousedown)="onAcceptMouseDown($event, row)"
+            >
+              ✓
+            </button>
+            <button
+              type="button"
+              class="action-cell__override-btn"
+              (click)="onOverrideClick($event, row)"
+            >
+              {{ overrideTriggerLabel(row) }}
+            </button>
+          </ng-template>
+        </div>
+      </td>
+    </tr>
+  </tbody>
+</table>
+<p class="results-table__empty" *ngIf="rows.length === 0">No rows in this bucket.</p>
+
