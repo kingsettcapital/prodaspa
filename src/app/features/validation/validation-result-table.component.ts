@@ -1,5 +1,6 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import {
+  ParentAppliesToItem,
   ParentValidationResult,
   ValidationResult
 } from './models/validation.models';
@@ -42,10 +43,6 @@ export class ValidationResultTableComponent {
   }
 
   rowKey(row: ValidationRow): string {
-    if (this.fieldType === 'tenant') {
-      const t = row as ValidationResult;
-      return `${t.unitId}|${t.tenantName}`;
-    }
     return row.tenantName;
   }
 
@@ -58,25 +55,18 @@ export class ValidationResultTableComponent {
   }
 
   unitDisplay(row: ValidationRow): string {
-    if (this.fieldType === 'tenant') {
-      return (row as ValidationResult).unitId;
-    }
-    const parent = row as ParentValidationResult;
-    const n = parent.appliesTo?.length ?? 0;
+    const applies = this.appliesToForRow(row);
+    const n = applies.length;
     if (n === 1) {
-      return parent.appliesTo[0].unit?.trim() || '—';
+      return applies[0].unit?.trim() || '—';
     }
     return n > 0 ? `${n} units` : '—';
   }
 
   buildingDisplay(row: ValidationRow): string {
-    if (this.fieldType === 'tenant') {
-      return (row as ValidationResult).buildingName || '—';
-    }
-    const parent = row as ParentValidationResult;
     const buildings = [
       ...new Set(
-        (parent.appliesTo ?? [])
+        this.appliesToForRow(row)
           .map(a => a.building?.trim())
           .filter(b => !!b)
       )
@@ -88,6 +78,17 @@ export class ValidationResultTableComponent {
       return buildings.join(', ');
     }
     return `${buildings.length} buildings`;
+  }
+
+  private appliesToForRow(row: ValidationRow): ParentAppliesToItem[] {
+    if (this.fieldType === 'tenant') {
+      const tenant = row as ValidationResult;
+      if (tenant.appliesTo?.length) {
+        return tenant.appliesTo;
+      }
+      return [{ building: tenant.buildingName, unit: tenant.unitId }];
+    }
+    return (row as ParentValidationResult).appliesTo ?? [];
   }
 
   hasSuggestion(row: ValidationRow): boolean {

@@ -17,6 +17,7 @@ export interface ValidationResult {
   suggestedName: string | null;
   confidence: number | null;
   reason: string;
+  appliesTo: ParentAppliesToItem[];
 }
 
 export interface ValidationResponse {

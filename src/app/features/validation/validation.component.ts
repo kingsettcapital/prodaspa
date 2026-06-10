@@ -541,10 +541,6 @@ export class ValidationComponent implements OnDestroy {
   }
 
   private tableRowKey(fieldType: FieldType, row: ValidationRow): string {
-    if (fieldType === 'tenant') {
-      const t = row as ValidationResult;
-      return `${t.unitId}|${t.tenantName}`;
-    }
     return row.tenantName;
   }
 
@@ -619,11 +615,8 @@ export class ValidationComponent implements OnDestroy {
   }
 
   private correctionKey(fileIndex: number, fieldType: FieldType, row: ValidationRow): string {
-    if (fieldType === 'tenant') {
-      const t = row as ValidationResult;
-      return `${fileIndex}|tenant|${t.unitId}|${t.tenantName}`;
-    }
-    return `${fileIndex}|parent|${row.tenantName}`;
+    const scope = fieldType === 'tenant' ? 'tenant' : 'parent';
+    return `${fileIndex}|${scope}|${row.tenantName}`;
   }
 
   private setCorrection(
@@ -645,9 +638,11 @@ export class ValidationComponent implements OnDestroy {
       changeType: update.changeType,
       confidence: update.confidence,
       matchSource: update.matchSource,
-      unitId: fieldType === 'tenant' ? (row as ValidationResult).unitId : '',
-      building: fieldType === 'tenant' ? (row as ValidationResult).buildingName : '',
-      appliesTo: fieldType === 'parent' ? (row as ParentValidationResult).appliesTo ?? [] : []
+      unitId: '',
+      building: '',
+      appliesTo: fieldType === 'tenant'
+        ? this.tenantAppliesTo(row as ValidationResult)
+        : (row as ParentValidationResult).appliesTo ?? []
     };
     map.set(this.correctionKey(fileIndex, fieldType, row), record);
     this.corrections = map;
@@ -709,15 +704,15 @@ export class ValidationComponent implements OnDestroy {
 
     const tenantCorrections = this.correctionsForFile(fileIndex)
       .filter(c => c.fieldType === 'Tenant')
-      .map(c => ({
-        unitId: c.unitId,
-        building: c.building,
+      .flatMap(c => this.correctionTargets(c).map(target => ({
+        unitId: target.unit,
+        building: target.building,
         originalName: c.originalName,
         correctedName: c.correctedName,
         changeType: c.changeType,
         confidence: c.confidence,
         matchSource: c.matchSource
-      }));
+      })));
 
     const parentCorrections = this.correctionsForFile(fileIndex)
       .filter(c => c.fieldType === 'Parent')
@@ -762,6 +757,23 @@ export class ValidationComponent implements OnDestroy {
       });
 
     this.downloadSubscriptions.set(fileIndex, subscription);
+  }
+
+  private tenantAppliesTo(row: ValidationResult): ParentAppliesToItem[] {
+    if (row.appliesTo?.length) {
+      return row.appliesTo;
+    }
+    return [{ building: row.buildingName, unit: row.unitId }];
+  }
+
+  private correctionTargets(record: StoredCorrectionRecord): ParentAppliesToItem[] {
+    if (record.appliesTo.length > 0) {
+      return record.appliesTo;
+    }
+    if (record.unitId || record.building) {
+      return [{ building: record.building, unit: record.unitId }];
+    }
+    return [];
   }
 
   private correctionsForFile(fileIndex: number): StoredCorrectionRecord[] {
