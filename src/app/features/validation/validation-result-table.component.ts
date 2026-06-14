@@ -38,6 +38,19 @@ export class ValidationResultTableComponent {
     return this.bucket !== 'excluded';
   }
 
+  get secondColumnHeader(): string {
+    switch (this.bucket) {
+      case 'excluded':
+        return 'Master List Name';
+      case 'flagged':
+        return 'Suggested Fix';
+      case 'suggested':
+      case 'new':
+      default:
+        return 'Suggested Name';
+    }
+  }
+
   trackByRow(index: number): number {
     return index;
   }

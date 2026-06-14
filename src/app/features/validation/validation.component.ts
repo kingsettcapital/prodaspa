@@ -53,7 +53,7 @@ interface FieldGroupConfig {
   nameColumnLabel: string;
 }
 
-type BulkActionType = 'apply-all' | 'accept-as-is' | 'standardise';
+type BulkActionType = 'apply-all' | 'accept-as-is' | 'standardise' | 'align-master';
 
 interface PendingBulkAction {
   type: BulkActionType;
@@ -104,6 +104,12 @@ export class ValidationComponent implements OnDestroy {
       description: (fieldLabel) =>
         `This will apply the standardised spelling for every flagged name in ${fieldLabel.toLowerCase()} that only needs formatting fixes.`,
       confirmClass: 'confirm-dialog__btn--red'
+    },
+    'align-master': {
+      label: 'Align to Master List',
+      description: (fieldLabel) =>
+        `This will align every correct ${fieldLabel.toLowerCase()} row whose Excel name differs from the master list canonical name.`,
+      confirmClass: 'confirm-dialog__btn--amber'
     }
   };
 
@@ -526,6 +532,9 @@ export class ValidationComponent implements OnDestroy {
       case 'standardise':
         this.executeStandardiseAll(fileIndex, fieldType);
         break;
+      case 'align-master':
+        this.executeAlignToMaster(fileIndex, fieldType);
+        break;
     }
   }
 
@@ -546,6 +555,38 @@ export class ValidationComponent implements OnDestroy {
 
   acceptAsIsEligibleCount(fileIndex: number, fieldType: FieldType): number {
     return this.rowsForBucket(fileIndex, fieldType, 'new').length;
+  }
+
+  alignToMasterEligibleCount(fileIndex: number, fieldType: FieldType): number {
+    return this.rowsForBucket(fileIndex, fieldType, 'excluded')
+      .filter(row => this.isDivergentFromMaster(row))
+      .length;
+  }
+
+  private isDivergentFromMaster(row: ValidationRow): boolean {
+    if (!this.hasSuggestion(row)) {
+      return false;
+    }
+    const canonical = (row.suggestion ?? row.suggestedName)?.trim();
+    return canonical != null && canonical !== row.tenantName;
+  }
+
+  private executeAlignToMaster(fileIndex: number, fieldType: FieldType): void {
+    for (const row of this.rowsForBucket(fileIndex, fieldType, 'excluded')) {
+      if (!this.hasSuggestion(row)) {
+        continue;
+      }
+      const canonical = (row.suggestion ?? row.suggestedName)?.trim();
+      if (!canonical || canonical === row.tenantName) {
+        continue;
+      }
+      this.setCorrection(fileIndex, fieldType, row, {
+        correctedName: canonical,
+        changeType: 'AcceptedSuggestion',
+        confidence: row.confidence,
+        matchSource: row.matchSource
+      });
+    }
   }
 
   private executeApplyAllSuggestions(fileIndex: number, fieldType: FieldType): void {

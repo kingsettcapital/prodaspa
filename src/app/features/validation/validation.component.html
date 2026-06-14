@@ -173,6 +173,20 @@
                       Standardise All
                     </button>
                   </div>
+                  <div
+                    class="bucket__header-actions"
+                    *ngIf="bucket.key === 'excluded'"
+                    (click)="$event.stopPropagation()"
+                  >
+                    <button
+                      type="button"
+                      class="bucket-btn bucket-btn--amber"
+                      [disabled]="alignToMasterEligibleCount(fileIndex, fieldGroup.type) === 0"
+                      (click)="requestBulkAction('align-master', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
+                    >
+                      Align to Master List
+                    </button>
+                  </div>
                 </div>
 
                 <div
