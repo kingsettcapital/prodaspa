@@ -43,6 +43,11 @@
       </ng-template>
     </section>
 
+    <label class="asof-field">
+      As-of date
+      <input type="date" [(ngModel)]="asOfDate" name="asOfDate" />
+    </label>
+
     <button
       type="button"
       class="validate-all-btn"
@@ -59,6 +64,7 @@
     </div>
 
     <section class="file-results" *ngIf="batchResults.length > 0">
+      <p class="asof-note">Showing tenants in place as of {{ asOfDisplay }}.</p>
       <div
         class="file-card"
         *ngFor="let result of batchResults; let fileIndex = index; trackBy: trackByFileName"

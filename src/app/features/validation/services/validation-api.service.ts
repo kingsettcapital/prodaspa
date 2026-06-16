@@ -25,9 +25,12 @@ export class ValidationApiService {
     return `${this.base}/${path.replace(/^\/+/, '')}`;
   }
 
-  validateBatch(files: File[]): Observable<BatchValidationResult[]> {
+  validateBatch(files: File[], asOf?: string): Observable<BatchValidationResult[]> {
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
+    if (asOf) {
+      formData.append('asOf', asOf);
+    }
     return this.http.post<BatchValidationResult[]>(
       this.buildUrl('Validation/validate-batch'),
       formData,
