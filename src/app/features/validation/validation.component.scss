@@ -586,6 +586,24 @@ $upload-drag-bg: #eff6ff;
   }
 }
 
+.bulk-action--green {
+  border: 1px solid #2e7d32;
+  color: #2e7d32;
+
+  &:hover:not(:disabled) {
+    background: #f1f8f1;
+  }
+}
+
+.bulk-action--gold {
+  border: 1px solid #9a6a06;
+  color: #9a6a06;
+
+  &:hover:not(:disabled) {
+    background: #fff4e6;
+  }
+}
+
 .file-download {
   margin-top: 1rem;
   padding-top: 1rem;

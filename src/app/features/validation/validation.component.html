@@ -146,7 +146,7 @@
                   >
                     <button
                       type="button"
-                      class="bucket-btn bucket-btn--amber"
+                      class="bucket-btn bulk-action--green"
                       (click)="requestBulkAction('apply-all', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
                     >
                       Apply All Suggestions
@@ -159,7 +159,7 @@
                   >
                     <button
                       type="button"
-                      class="bucket-btn bucket-btn--green"
+                      class="bucket-btn bulk-action--gold"
                       [disabled]="acceptAsIsEligibleCount(fileIndex, fieldGroup.type) === 0"
                       (click)="requestBulkAction('accept-as-is', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
                     >
@@ -173,7 +173,7 @@
                   >
                     <button
                       type="button"
-                      class="bucket-btn bucket-btn--red"
+                      class="bucket-btn bulk-action--gold"
                       (click)="requestBulkAction('standardise', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
                     >
                       Standardise All
@@ -186,11 +186,11 @@
                   >
                     <button
                       type="button"
-                      class="bucket-btn bucket-btn--amber"
-                      [disabled]="alignToMasterEligibleCount(fileIndex, fieldGroup.type) === 0"
+                      class="bucket-btn bulk-action--green"
+                      [disabled]="alignToMasterCount(fileIndex, fieldGroup.type) === 0"
                       (click)="requestBulkAction('align-master', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
                     >
-                      Align to Master List
+                      Align to Master List ({{ alignToMasterCount(fileIndex, fieldGroup.type) }})
                     </button>
                   </div>
                 </div>

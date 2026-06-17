@@ -579,10 +579,16 @@ export class ValidationComponent implements OnDestroy {
     return this.rowsForBucket(fileIndex, fieldType, 'new').length;
   }
 
-  alignToMasterEligibleCount(fileIndex: number, fieldType: FieldType): number {
+  alignToMasterCount(fileIndex: number, fieldType: FieldType): number {
+    return this.rowsAlignableToMaster(fileIndex, fieldType).length;
+  }
+
+  rowsAlignableToMaster(fileIndex: number, fieldType: FieldType): ValidationRow[] {
+    const acceptedKeys = this.tableAcceptedKeys(fileIndex, fieldType);
     return this.rowsForBucket(fileIndex, fieldType, 'excluded')
-      .filter(row => this.isDivergentFromMaster(row))
-      .length;
+      .filter(row =>
+        this.isDivergentFromMaster(row)
+        && !acceptedKeys.has(this.tableRowKey(fieldType, row)));
   }
 
   private isDivergentFromMaster(row: ValidationRow): boolean {
@@ -594,12 +600,9 @@ export class ValidationComponent implements OnDestroy {
   }
 
   private executeAlignToMaster(fileIndex: number, fieldType: FieldType): void {
-    for (const row of this.rowsForBucket(fileIndex, fieldType, 'excluded')) {
-      if (!this.hasSuggestion(row)) {
-        continue;
-      }
+    for (const row of this.rowsAlignableToMaster(fileIndex, fieldType)) {
       const canonical = (row.suggestion ?? row.suggestedName)?.trim();
-      if (!canonical || canonical === row.tenantName) {
+      if (!canonical) {
         continue;
       }
       this.setCorrection(fileIndex, fieldType, row, {
