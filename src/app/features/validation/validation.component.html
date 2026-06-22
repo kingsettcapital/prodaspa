@@ -124,7 +124,7 @@
             <div class="field-group__body" *ngIf="isFieldGroupExpanded(fileIndex, fieldGroup.type)">
               <div
                 class="bucket"
-                *ngFor="let bucket of statusBuckets"
+                *ngFor="let bucket of displayBuckets"
               >
                 <div
                   class="bucket__header"
@@ -147,6 +147,7 @@
                     <button
                       type="button"
                       class="bucket-btn bulk-action--green"
+                      [disabled]="applyAllSuggestionsCount(fileIndex, fieldGroup.type) === 0"
                       (click)="requestBulkAction('apply-all', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
                     >
                       Apply All Suggestions
@@ -159,38 +160,11 @@
                   >
                     <button
                       type="button"
-                      class="bucket-btn bulk-action--gold"
+                      class="bucket-btn bulk-action--green"
                       [disabled]="acceptAsIsEligibleCount(fileIndex, fieldGroup.type) === 0"
                       (click)="requestBulkAction('accept-as-is', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
                     >
                       Accept All As-Is
-                    </button>
-                  </div>
-                  <div
-                    class="bucket__header-actions"
-                    *ngIf="bucket.key === 'flagged'"
-                    (click)="$event.stopPropagation()"
-                  >
-                    <button
-                      type="button"
-                      class="bucket-btn bulk-action--gold"
-                      (click)="requestBulkAction('standardise', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
-                    >
-                      Standardise All
-                    </button>
-                  </div>
-                  <div
-                    class="bucket__header-actions"
-                    *ngIf="bucket.key === 'excluded'"
-                    (click)="$event.stopPropagation()"
-                  >
-                    <button
-                      type="button"
-                      class="bucket-btn bulk-action--green"
-                      [disabled]="alignToMasterCount(fileIndex, fieldGroup.type) === 0"
-                      (click)="requestBulkAction('align-master', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
-                    >
-                      Align to Master List ({{ alignToMasterCount(fileIndex, fieldGroup.type) }})
                     </button>
                   </div>
                 </div>
@@ -203,7 +177,7 @@
                     [fieldType]="fieldGroup.type"
                     [bucket]="bucket.key"
                     [nameColumnLabel]="fieldGroup.nameColumnLabel"
-                    [rows]="rowsForBucket(fileIndex, fieldGroup.type, bucket.key)"
+                    [rows]="rowsForDisplayBucket(fileIndex, fieldGroup.type, bucket.key)"
                     [acceptedKeys]="tableAcceptedKeys(fileIndex, fieldGroup.type)"
                     [correctionByKey]="tableCorrectionMap(fileIndex, fieldGroup.type)"
                     (accept)="onTableAccept(fileIndex, fieldGroup.type, $event)"
@@ -217,15 +191,25 @@
           </div>
 
           <div class="file-download" (click)="$event.stopPropagation()">
-            <button
-              type="button"
-              class="file-download__btn"
-              [disabled]="isDownloadInProgress(fileIndex)"
-              (click)="downloadFile(fileIndex, $event)"
-            >
-              <mat-icon class="file-download__icon">download</mat-icon>
-              Download Corrected File
-            </button>
+            <div class="file-download__actions">
+              <button
+                type="button"
+                class="file-download__btn"
+                [disabled]="isDownloadInProgress(fileIndex)"
+                (click)="downloadFile(fileIndex, $event)"
+              >
+                <mat-icon class="file-download__icon">download</mat-icon>
+                Download Corrected File
+              </button>
+              <button
+                type="button"
+                class="file-clear__btn"
+                (click)="clearBatch(fileInput)"
+              >
+                <mat-icon class="file-clear__icon">close</mat-icon>
+                Clear File
+              </button>
+            </div>
 
             <div
               class="download-checklist"

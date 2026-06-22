@@ -53,7 +53,7 @@ interface FieldGroupConfig {
   nameColumnLabel: string;
 }
 
-type BulkActionType = 'apply-all' | 'accept-as-is' | 'standardise' | 'align-master';
+type BulkActionType = 'apply-all' | 'accept-as-is' | 'standardise';
 
 interface PendingBulkAction {
   type: BulkActionType;
@@ -104,12 +104,6 @@ export class ValidationComponent implements OnDestroy {
       description: (fieldLabel) =>
         `This will apply the standardised spelling for every flagged name in ${fieldLabel.toLowerCase()} that only needs formatting fixes.`,
       confirmClass: 'confirm-dialog__btn--red'
-    },
-    'align-master': {
-      label: 'Align to Master List',
-      description: (fieldLabel) =>
-        `This will align every correct ${fieldLabel.toLowerCase()} row whose Excel name differs from the master list canonical name.`,
-      confirmClass: 'confirm-dialog__btn--amber'
     }
   };
 
@@ -129,6 +123,8 @@ export class ValidationComponent implements OnDestroy {
   expandedSections = new Set<string>();
   corrections = new Map<string, StoredCorrectionRecord>();
   downloadProgressByFile = new Map<number, DownloadChecklistState>();
+
+  private autoAlignApplied = false;
 
   /** FIX 3: bump when corrections mutate so table inputs reuse stable Map/Set refs. */
   private correctionsVersion = 0;
@@ -151,11 +147,10 @@ export class ValidationComponent implements OnDestroy {
     'Generating corrected Excel file'
   ] as const;
 
-  readonly statusBuckets: StatusBucketConfig[] = [
+  readonly displayBuckets: StatusBucketConfig[] = [
     { key: 'new', label: '🆕 New Names', headerClass: 'bucket-header--new' },
-    { key: 'flagged', label: '🚨 Flagged', headerClass: 'bucket-header--flagged' },
     { key: 'suggested', label: '⚠️ Suggested', headerClass: 'bucket-header--suggested' },
-    { key: 'excluded', label: '✅ Correct', headerClass: 'bucket-header--correct' }
+    { key: 'excluded', label: '✅ Corrected', headerClass: 'bucket-header--correct' }
   ];
 
   constructor(
@@ -235,8 +230,18 @@ export class ValidationComponent implements OnDestroy {
     this.expandedSections = new Set<string>();
     this.corrections = new Map<string, StoredCorrectionRecord>();
     this.downloadProgressByFile = new Map<number, DownloadChecklistState>();
+    this.autoAlignApplied = false;
     this.bumpCorrectionsCache();
     this.clearRowsForBucketCache();
+  }
+
+  clearBatch(fileInput?: HTMLInputElement): void {
+    this.resetResultsState();
+    this.selectedFiles = [];
+    this.errorMessage = '';
+    if (fileInput) {
+      fileInput.value = '';
+    }
   }
 
   ngOnDestroy(): void {
@@ -255,6 +260,7 @@ export class ValidationComponent implements OnDestroy {
     this.validationApi.validateBatch(this.selectedFiles, this.asOfDate).subscribe({
       next: (results) => {
         this.batchResults = results;
+        this.autoStageAlignments();
         this.isLoading = false;
         this.loadHistory();
       },
@@ -354,12 +360,42 @@ export class ValidationComponent implements OnDestroy {
     return rows;
   }
 
+  private isVacantRow(row: ValidationRow): boolean {
+    const reason = (row.reason ?? '').trim().toLowerCase();
+    if (reason === 'blank / vacant') {
+      return true;
+    }
+    const name = (row.tenantName ?? '').trim();
+    return name.length === 0 || name.toUpperCase() === 'VACANT';
+  }
+
+  rowsForDisplayBucket(fileIndex: number, fieldType: FieldType, key: BucketKey): ValidationRow[] {
+    const cacheKey = `display|${fileIndex}|${fieldType}|${key}`;
+    const cached = this.rowsForBucketCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    let rows: ValidationRow[];
+    if (key === 'suggested') {
+      rows = [
+        ...this.rowsForBucket(fileIndex, fieldType, 'suggested'),
+        ...this.rowsForBucket(fileIndex, fieldType, 'flagged')
+      ].filter(r => !this.isVacantRow(r));
+    } else {
+      rows = this.rowsForBucket(fileIndex, fieldType, key).filter(r => !this.isVacantRow(r));
+    }
+
+    this.rowsForBucketCache.set(cacheKey, rows);
+    return rows;
+  }
+
   private clearRowsForBucketCache(): void {
     this.rowsForBucketCache.clear();
   }
 
   bucketCount(fileIndex: number, fieldType: FieldType, bucket: BucketKey): number {
-    return this.rowsForBucket(fileIndex, fieldType, bucket).length;
+    return this.rowsForDisplayBucket(fileIndex, fieldType, bucket).length;
   }
 
   tenantSummary(fileIndex: number): string {
@@ -554,9 +590,6 @@ export class ValidationComponent implements OnDestroy {
       case 'standardise':
         this.executeStandardiseAll(fileIndex, fieldType);
         break;
-      case 'align-master':
-        this.executeAlignToMaster(fileIndex, fieldType);
-        break;
     }
   }
 
@@ -576,11 +609,22 @@ export class ValidationComponent implements OnDestroy {
   }
 
   acceptAsIsEligibleCount(fileIndex: number, fieldType: FieldType): number {
-    return this.rowsForBucket(fileIndex, fieldType, 'new').length;
+    const acceptedKeys = this.tableAcceptedKeys(fileIndex, fieldType);
+    return this.rowsForDisplayBucket(fileIndex, fieldType, 'new')
+      .filter(row => !acceptedKeys.has(this.tableRowKey(fieldType, row)))
+      .length;
   }
 
-  alignToMasterCount(fileIndex: number, fieldType: FieldType): number {
-    return this.rowsAlignableToMaster(fileIndex, fieldType).length;
+  applyAllSuggestionsCount(fileIndex: number, fieldType: FieldType): number {
+    return this.rowsApplicableSuggestions(fileIndex, fieldType).length;
+  }
+
+  rowsApplicableSuggestions(fileIndex: number, fieldType: FieldType): ValidationRow[] {
+    const acceptedKeys = this.tableAcceptedKeys(fileIndex, fieldType);
+    return this.rowsForDisplayBucket(fileIndex, fieldType, 'suggested')
+      .filter(row =>
+        this.hasSuggestion(row)
+        && !acceptedKeys.has(this.tableRowKey(fieldType, row)));
   }
 
   rowsAlignableToMaster(fileIndex: number, fieldType: FieldType): ValidationRow[] {
@@ -599,7 +643,18 @@ export class ValidationComponent implements OnDestroy {
     return canonical != null && canonical !== row.tenantName;
   }
 
-  private executeAlignToMaster(fileIndex: number, fieldType: FieldType): void {
+  private autoStageAlignments(): void {
+    if (this.autoAlignApplied) {
+      return;
+    }
+    this.batchResults.forEach((_, fileIndex) => {
+      this.autoStageForField(fileIndex, 'tenant');
+      this.autoStageForField(fileIndex, 'parent');
+    });
+    this.autoAlignApplied = true;
+  }
+
+  private autoStageForField(fileIndex: number, fieldType: FieldType): void {
     for (const row of this.rowsAlignableToMaster(fileIndex, fieldType)) {
       const canonical = (row.suggestion ?? row.suggestedName)?.trim();
       if (!canonical) {
@@ -609,13 +664,13 @@ export class ValidationComponent implements OnDestroy {
         correctedName: canonical,
         changeType: 'AcceptedSuggestion',
         confidence: row.confidence,
-        matchSource: row.matchSource
+        matchSource: 'AutoAligned'
       });
     }
   }
 
   private executeApplyAllSuggestions(fileIndex: number, fieldType: FieldType): void {
-    for (const row of this.rowsForBucket(fileIndex, fieldType, 'suggested')) {
+    for (const row of this.rowsForDisplayBucket(fileIndex, fieldType, 'suggested')) {
       if (this.hasSuggestion(row)) {
         this.acceptRow(fileIndex, fieldType, row);
       }
@@ -631,7 +686,7 @@ export class ValidationComponent implements OnDestroy {
   }
 
   private executeAcceptAllAsIs(fileIndex: number, fieldType: FieldType): void {
-    for (const row of this.rowsForBucket(fileIndex, fieldType, 'new')) {
+    for (const row of this.rowsForDisplayBucket(fileIndex, fieldType, 'new')) {
       this.acceptRow(fileIndex, fieldType, row);
     }
   }

@@ -38,6 +38,13 @@ export class ValidationResultTableComponent {
     return this.bucket !== 'excluded';
   }
 
+  get showAcceptedIndicator(): boolean {
+    // accepted indicator (✓ Corrected + Undo) renders in every bucket,
+    // including Correct; only the pending accept/override controls are
+    // bucket-gated (see template).
+    return true;
+  }
+
   get secondColumnHeader(): string {
     switch (this.bucket) {
       case 'excluded':
