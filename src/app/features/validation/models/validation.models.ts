@@ -103,3 +103,38 @@ export interface DownloadCorrectionsPayload {
   tenantCorrections: CorrectionItem[];
   parentCorrections: ParentCorrectionItem[];
 }
+
+export interface DraftCounts {
+  total: number;
+  excluded: number;
+  suggested: number;
+  flagged: number;
+  new: number;
+}
+
+export interface DraftSummary {
+  id: number;
+  fileId: string;
+  fileName: string;
+  status: string;
+  total: number;
+  excluded: number;
+  suggested: number;
+  flagged: number;
+  new: number;
+  savedAt: string;
+  completedAt: string | null;
+}
+
+export interface DraftDetail {
+  fileId: string;
+  fileName: string;
+  status: string;
+  savedAt: string;
+  completedAt: string | null;
+  counts: DraftCounts;
+  resultsJson: string;
+  decisionsJson: string;
+  fileBase64: string;
+  fileContentType: string;
+}

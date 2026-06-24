@@ -7,6 +7,8 @@
       </p>
     </header>
 
+    <div class="validation-layout">
+      <div class="validation-layout__main">
     <section
       class="upload-zone"
       [class.upload-zone--dragging]="isDragging"
@@ -79,29 +81,6 @@
           <div class="file-card__header-right">
             <span class="file-card__corrections-badge" *ngIf="acceptedCount(fileIndex) > 0">
               {{ acceptedCount(fileIndex) }} corrections ready
-            </span>
-            <span class="file-card__summary">
-              <ng-container *ngIf="result.response as tenant">
-                Tenant
-                {{ tenant.new }} new
-                <span class="file-card__summary-dot"> · </span>
-                {{ tenant.flagged }} flagged
-                <span class="file-card__summary-dot"> · </span>
-                {{ tenant.suggested }} suggested
-                <span class="file-card__summary-dot"> · </span>
-                <span class="file-card__summary-correct">{{ tenant.excluded }} correct</span>
-              </ng-container>
-              <ng-container *ngIf="result.parentResponse as parent">
-                <span class="file-card__summary-sep">|</span>
-                Parent
-                {{ parent.new }} new
-                <span class="file-card__summary-dot"> · </span>
-                {{ parent.flagged }} flagged
-                <span class="file-card__summary-dot"> · </span>
-                {{ parent.suggested }} suggested
-                <span class="file-card__summary-dot"> · </span>
-                <span class="file-card__summary-correct">{{ parent.excluded }} correct</span>
-              </ng-container>
             </span>
           </div>
         </div>
@@ -194,6 +173,15 @@
             <div class="file-download__actions">
               <button
                 type="button"
+                class="file-save__btn"
+                [disabled]="!canSaveDraft(fileIndex)"
+                (click)="saveDraft(fileIndex)"
+              >
+                <mat-icon class="file-save__icon">save</mat-icon>
+                <span>{{ draftSaveStatus(fileIndex) === 'saving' ? 'Saving…' : 'Save Draft' }}</span>
+              </button>
+              <button
+                type="button"
                 class="file-download__btn"
                 [disabled]="isDownloadInProgress(fileIndex)"
                 (click)="downloadFile(fileIndex, $event)"
@@ -210,6 +198,13 @@
                 Clear File
               </button>
             </div>
+
+            <p class="file-save__status file-save__status--saved" *ngIf="draftSaveStatus(fileIndex) === 'saved'">
+              ✓ Draft saved
+            </p>
+            <p class="file-save__status file-save__status--error" *ngIf="draftSaveStatus(fileIndex) === 'error'">
+              Draft save failed — please try again.
+            </p>
 
             <div
               class="download-checklist"
@@ -254,24 +249,10 @@
                 {{ progress.errorMessage }}
               </p>
             </div>
-
-            <p class="file-download__note">
-              (Downloads a copy of the original file with your accepted corrections applied)
-            </p>
           </div>
         </div>
       </div>
     </section>
-
-    <div class="save-to-cloud" *ngIf="batchResults.length > 0">
-      <button type="button" class="save-to-cloud__btn" (click)="saveToCloud()">
-        <mat-icon class="save-to-cloud__icon">cloud_upload</mat-icon>
-        Save to Cloud
-      </button>
-      <p class="save-to-cloud__note">
-        (Please only upload validated files to the cloud)
-      </p>
-    </div>
 
     <section class="history-panel">
       <div class="history-panel__header">
@@ -334,6 +315,38 @@
         </div>
       </div>
     </section>
+      </div>
+
+      <aside class="validation-layout__rail" *ngIf="hasInProgressDrafts">
+        <section class="resume-banner">
+          <div class="resume-banner__head">
+            <mat-icon class="resume-banner__icon">history</mat-icon>
+            <p class="resume-banner__title">Drafts in progress</p>
+          </div>
+          <div class="resume-banner__list">
+            <div
+              class="resume-draft"
+              *ngFor="let d of inProgressDrafts; trackBy: trackByDraftFileId"
+            >
+              <div class="resume-draft__meta">
+                <span class="resume-draft__name">{{ d.fileName }}</span>
+                <span class="resume-draft__detail">
+                  Saved {{ d.savedAt | date:'medium' }}
+                </span>
+              </div>
+              <button
+                type="button"
+                class="resume-draft__btn"
+                (click)="resumeDraft(d.fileId)"
+              >
+                Resume
+                <mat-icon class="resume-draft__btn-icon">arrow_forward</mat-icon>
+              </button>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </div>
   </div>
 
   <div class="override-popover-layer" *ngIf="pendingOverride as popover">

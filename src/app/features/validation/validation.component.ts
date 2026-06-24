@@ -1,10 +1,13 @@
-import { Component, HostListener, OnDestroy } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ValidationApiService } from './services/validation-api.service';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import {
   BatchValidationResult,
   CorrectionChangeType,
+  DownloadCorrectionsPayload,
+  DraftDetail,
+  DraftSummary,
   MatchSource,
   ParentAppliesToItem,
   ParentValidationResult,
@@ -83,7 +86,7 @@ interface DownloadChecklistState {
   templateUrl: './validation.component.html',
   styleUrls: ['./validation.component.scss']
 })
-export class ValidationComponent implements OnDestroy {
+export class ValidationComponent implements OnInit, OnDestroy {
   private static readonly DOWNLOAD_STEP_MS = 800;
 
   private static readonly BULK_CONFIRM_CONFIG: Record<BulkActionType, BulkConfirmConfig> = {
@@ -123,6 +126,7 @@ export class ValidationComponent implements OnDestroy {
   expandedSections = new Set<string>();
   corrections = new Map<string, StoredCorrectionRecord>();
   downloadProgressByFile = new Map<number, DownloadChecklistState>();
+  private draftSaveState = new Map();
 
   private autoAlignApplied = false;
 
@@ -138,6 +142,9 @@ export class ValidationComponent implements OnDestroy {
   history: ValidationHistory[] = [];
   historyLoading = false;
   historyError = '';
+  drafts: DraftSummary[] = [];
+  draftsLoading = false;
+  draftsError: string | null = null;
   pendingBulkAction: PendingBulkAction | null = null;
   pendingOverride: PendingOverride | null = null;
 
@@ -157,6 +164,10 @@ export class ValidationComponent implements OnDestroy {
     private validationApi: ValidationApiService,
     private notify: NotificationService
   ) {}
+
+  ngOnInit(): void {
+    this.loadDrafts();
+  }
 
   get canValidate(): boolean {
     return this.selectedFiles.length > 0 && !this.isLoading;
@@ -230,6 +241,7 @@ export class ValidationComponent implements OnDestroy {
     this.expandedSections = new Set<string>();
     this.corrections = new Map<string, StoredCorrectionRecord>();
     this.downloadProgressByFile = new Map<number, DownloadChecklistState>();
+    this.draftSaveState.clear();
     this.autoAlignApplied = false;
     this.bumpCorrectionsCache();
     this.clearRowsForBucketCache();
@@ -396,22 +408,6 @@ export class ValidationComponent implements OnDestroy {
 
   bucketCount(fileIndex: number, fieldType: FieldType, bucket: BucketKey): number {
     return this.rowsForDisplayBucket(fileIndex, fieldType, bucket).length;
-  }
-
-  tenantSummary(fileIndex: number): string {
-    const response = this.batchResults[fileIndex]?.response;
-    if (!response) {
-      return '';
-    }
-    return `${response.flagged} flagged · ${response.suggested} suggested · ${response.excluded} correct`;
-  }
-
-  parentSummary(fileIndex: number): string {
-    const response = this.batchResults[fileIndex]?.parentResponse;
-    if (!response) {
-      return '';
-    }
-    return `${response.flagged} flagged · ${response.suggested} suggested · ${response.excluded} correct`;
   }
 
   acceptedCount(fileIndex: number): number {
@@ -778,6 +774,37 @@ export class ValidationComponent implements OnDestroy {
     return this.downloadProgress(fileIndex)?.inProgress ?? false;
   }
 
+  draftSaveStatus(fileIndex: number): 'idle' | 'saving' | 'saved' | 'error' {
+    return this.draftSaveState.get(fileIndex) ?? 'idle';
+  }
+
+  canSaveDraft(fileIndex: number): boolean {
+    return this.correctionsForFile(fileIndex).length > 0
+      && this.draftSaveStatus(fileIndex) !== 'saving';
+  }
+
+  saveDraft(fileIndex: number): void {
+    const file = this.selectedFiles[fileIndex];
+    const batchResult = this.batchResults[fileIndex];
+    if (!file || !batchResult) {
+      return;
+    }
+    const payload = this.buildDownloadPayload(fileIndex);
+    const resultsJson = JSON.stringify(batchResult);
+    const decisionsJson = JSON.stringify(payload);
+    this.draftSaveState.set(fileIndex, 'saving');
+    this.validationApi
+      .saveDraft(file, batchResult.fileId, file.name, resultsJson, decisionsJson)
+      .subscribe({
+        next: () => {
+          this.draftSaveState.set(fileIndex, 'saved');
+        },
+        error: () => {
+          this.draftSaveState.set(fileIndex, 'error');
+        }
+      });
+  }
+
   downloadFile(fileIndex: number, event?: Event): void {
     event?.stopPropagation();
     const file = this.selectedFiles[fileIndex];
@@ -823,35 +850,10 @@ export class ValidationComponent implements OnDestroy {
       });
     });
 
-    const tenantCorrections = this.correctionsForFile(fileIndex)
-      .filter(c => c.fieldType === 'Tenant')
-      .flatMap(c => this.correctionTargets(c).map(target => ({
-        unitId: target.unit,
-        building: target.building,
-        originalName: c.originalName,
-        correctedName: c.correctedName,
-        changeType: c.changeType,
-        confidence: c.confidence,
-        matchSource: c.matchSource
-      })));
-
-    const parentCorrections = this.correctionsForFile(fileIndex)
-      .filter(c => c.fieldType === 'Parent')
-      .map(c => ({
-        originalName: c.originalName,
-        correctedName: c.correctedName,
-        changeType: c.changeType,
-        confidence: c.confidence,
-        matchSource: c.matchSource,
-        appliesTo: c.appliesTo
-      }));
+    const payload = this.buildDownloadPayload(fileIndex);
 
     const subscription = this.validationApi
-      .downloadCorrected(file, {
-        fileId: batchResult.fileId,
-        tenantCorrections,
-        parentCorrections
-      })
+      .downloadCorrected(file, payload)
       .subscribe({
         next: (blob) => {
           if (this.downloadGeneration.get(fileIndex) !== generation) {
@@ -906,6 +908,35 @@ export class ValidationComponent implements OnDestroy {
       }
     });
     return list;
+  }
+
+  private buildDownloadPayload(fileIndex: number): DownloadCorrectionsPayload {
+    const tenantCorrections = this.correctionsForFile(fileIndex)
+      .filter(c => c.fieldType === 'Tenant')
+      .flatMap(c => this.correctionTargets(c).map(target => ({
+        unitId: target.unit,
+        building: target.building,
+        originalName: c.originalName,
+        correctedName: c.correctedName,
+        changeType: c.changeType,
+        confidence: c.confidence,
+        matchSource: c.matchSource
+      })));
+    const parentCorrections = this.correctionsForFile(fileIndex)
+      .filter(c => c.fieldType === 'Parent')
+      .map(c => ({
+        originalName: c.originalName,
+        correctedName: c.correctedName,
+        changeType: c.changeType,
+        confidence: c.confidence,
+        matchSource: c.matchSource,
+        appliesTo: c.appliesTo
+      }));
+    return {
+      fileId: this.batchResults[fileIndex].fileId,
+      tenantCorrections,
+      parentCorrections
+    };
   }
 
   private triggerFileDownload(file: File, blob: Blob): void {
@@ -987,6 +1018,112 @@ export class ValidationComponent implements OnDestroy {
     }
   }
 
+  private loadDrafts(): void {
+    this.draftsLoading = true;
+    this.draftsError = null;
+    this.validationApi.getDrafts().subscribe({
+      next: (drafts) => {
+        this.drafts = drafts ?? [];
+        this.draftsLoading = false;
+      },
+      error: () => {
+        this.draftsError = 'Could not load drafts.';
+        this.draftsLoading = false;
+      }
+    });
+  }
+
+  get hasInProgressDrafts(): boolean {
+    return this.drafts.some(d => d.status === 'InProgress');
+  }
+
+  get inProgressDrafts(): DraftSummary[] {
+    return this.drafts.filter(d => d.status === 'InProgress');
+  }
+
+  resumeDraft(fileId: string): void {
+    if (this.batchResults.length > 0 || this.corrections.size > 0) {
+      const confirmed = window.confirm(
+        'Resume this draft? Your current unsaved file will be cleared.'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    this.validationApi.getDraft(fileId).subscribe({
+      next: (detail: DraftDetail) => {
+        let file: File;
+        let batchResult: BatchValidationResult;
+        let decisions: DownloadCorrectionsPayload;
+
+        try {
+          const byteChars = atob(detail.fileBase64);
+          const bytes = new Uint8Array(byteChars.length);
+          for (let i = 0; i < byteChars.length; i++) {
+            bytes[i] = byteChars.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: detail.fileContentType });
+          file = new File([blob], detail.fileName, { type: detail.fileContentType });
+          batchResult = JSON.parse(detail.resultsJson) as BatchValidationResult;
+          decisions = JSON.parse(detail.decisionsJson) as DownloadCorrectionsPayload;
+        } catch {
+          this.notify.error('This draft could not be restored.');
+          return;
+        }
+
+        this.resetResultsState();
+        this.selectedFiles = [file];
+        this.batchResults = [batchResult];
+
+        const skipped: string[] = [];
+        for (const d of decisions.tenantCorrections) {
+          const row = this.batchResults[0].response.results
+            .find(r => r.tenantName === d.originalName);
+          if (!row) {
+            skipped.push(`tenant:${d.originalName}`);
+            continue;
+          }
+          this.setCorrection(0, 'tenant', row, {
+            correctedName: d.correctedName,
+            changeType: d.changeType,
+            confidence: d.confidence,
+            matchSource: d.matchSource
+          });
+        }
+
+        for (const d of decisions.parentCorrections) {
+          const row = this.batchResults[0].parentResponse?.results
+            .find(r => r.tenantName === d.originalName);
+          if (!row) {
+            skipped.push(`parent:${d.originalName}`);
+            continue;
+          }
+          this.setCorrection(0, 'parent', row, {
+            correctedName: d.correctedName,
+            changeType: d.changeType,
+            confidence: d.confidence,
+            matchSource: d.matchSource
+          });
+        }
+
+        this.clearRowsForBucketCache();
+        this.autoAlignApplied = true;
+        this.expandedFiles = new Set<number>([0]);
+
+        if (skipped.length > 0) {
+          console.warn(
+            `resumeDraft: ${skipped.length} saved decision(s) had no matching row`,
+            skipped
+          );
+        }
+      },
+      error: () => {
+        this.notify.error('This draft could not be restored.');
+      }
+    });
+  }
+
   loadHistory(): void {
     this.historyLoading = true;
     this.historyError = '';
@@ -1006,11 +1143,6 @@ export class ValidationComponent implements OnDestroy {
     });
   }
 
-  /** Deferred stub — future: Fabric Lakehouse upload. */
-  saveToCloud(): void {
-    console.log('Save to Cloud clicked - not yet implemented');
-  }
-
   trackByFileName(_index: number, result: BatchValidationResult): string {
     return result.fileName;
   }
@@ -1021,5 +1153,9 @@ export class ValidationComponent implements OnDestroy {
 
   trackByHistoryId(_index: number, item: ValidationHistory): number {
     return item.id;
+  }
+
+  trackByDraftFileId(_index: number, d: DraftSummary): string {
+    return d.fileId;
   }
 }

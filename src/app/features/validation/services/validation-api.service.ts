@@ -5,6 +5,8 @@ import { environment } from '../../../../environments/environment';
 import {
   BatchValidationResult,
   DownloadCorrectionsPayload,
+  DraftDetail,
+  DraftSummary,
   ValidationHistory
 } from '../models/validation.models';
 
@@ -55,6 +57,42 @@ export class ValidationApiService {
   getHistory(): Observable<ValidationHistory[]> {
     return this.http.get<ValidationHistory[]>(
       this.buildUrl('Validation/history'),
+      { headers: this.defaultHeaders() }
+    );
+  }
+
+  getDrafts(): Observable<DraftSummary[]> {
+    return this.http.get<DraftSummary[]>(
+      this.buildUrl('Validation/drafts'),
+      { headers: this.defaultHeaders() }
+    );
+  }
+
+  getDraft(fileId: string): Observable<DraftDetail> {
+    return this.http.get<DraftDetail>(
+      this.buildUrl(`Validation/draft/${encodeURIComponent(fileId)}`),
+      { headers: this.defaultHeaders() }
+    );
+  }
+
+  saveDraft(
+    file: File,
+    fileId: string,
+    fileName: string,
+    resultsJson: string,
+    decisionsJson: string
+  ): Observable<{ fileId: string; id: number; status: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('draftJson', JSON.stringify({
+      fileId,
+      fileName,
+      resultsJson,
+      decisionsJson
+    }));
+    return this.http.post<{ fileId: string; id: number; status: string }>(
+      this.buildUrl('Validation/save-draft'),
+      formData,
       { headers: this.defaultHeaders() }
     );
   }
