@@ -96,4 +96,12 @@ export class ValidationApiService {
       { headers: this.defaultHeaders() }
     );
   }
+
+  discardDraft(fileId: string): Observable<{ fileId: string; status: string }> {
+    return this.http.post<{ fileId: string; status: string }>(
+      this.buildUrl(`Validation/draft/${encodeURIComponent(fileId)}/discard`),
+      {},
+      { headers: this.defaultHeaders() }
+    );
+  }
 }

@@ -328,11 +328,22 @@
               class="resume-draft"
               *ngFor="let d of inProgressDrafts; trackBy: trackByDraftFileId"
             >
-              <div class="resume-draft__meta">
-                <span class="resume-draft__name">{{ d.fileName }}</span>
-                <span class="resume-draft__detail">
-                  Saved {{ d.savedAt | date:'medium' }}
-                </span>
+              <div class="resume-draft__header">
+                <div class="resume-draft__meta">
+                  <span class="resume-draft__name">{{ d.fileName }}</span>
+                  <span class="resume-draft__detail">
+                    Saved {{ d.savedAt | date:'medium' }}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  class="resume-draft__discard"
+                  (click)="discardDraft(d.fileId)"
+                  aria-label="Discard draft"
+                  title="Discard draft"
+                >
+                  <mat-icon class="resume-draft__discard-icon">delete_outline</mat-icon>
+                </button>
               </div>
               <button
                 type="button"

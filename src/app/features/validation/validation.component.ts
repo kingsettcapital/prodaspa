@@ -1033,6 +1033,25 @@ export class ValidationComponent implements OnInit, OnDestroy {
     });
   }
 
+  discardDraft(fileId: string): void {
+    const confirmed = window.confirm(
+      'Discard this draft? Your saved decisions will be permanently removed.'
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    this.validationApi.discardDraft(fileId).subscribe({
+      next: () => {
+        this.loadDrafts();
+        this.notify.success('Draft discarded.');
+      },
+      error: () => {
+        this.notify.error('This draft could not be discarded.');
+      }
+    });
+  }
+
   get hasInProgressDrafts(): boolean {
     return this.drafts.some(d => d.status === 'InProgress');
   }
