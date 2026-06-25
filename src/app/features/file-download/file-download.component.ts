@@ -4,7 +4,7 @@ import { saveAs } from 'file-saver';
 import { FileService } from 'src/app/core/services/file.service';
 
 // 🛑 1. DEFINE THE CUSTOM VALIDATOR FUNCTION HERE (OUTSIDE THE CLASS)
-const isFirstOfMonth = (control: AbstractControl): ValidationErrors | null => {
+const isFirstOrLastOfMonth = (control: AbstractControl): ValidationErrors | null => {
   const dateValue = control.value;
 
   if (!dateValue) {
@@ -13,9 +13,11 @@ const isFirstOfMonth = (control: AbstractControl): ValidationErrors | null => {
 
   const date = new Date(dateValue);
 
-  // Check if the date is valid and the day is the 1st
-  if (isNaN(date.getTime()) || date.getDate() !== 1) {
-    return { notFirstOfMonth: true }; // Invalid
+  // Check the date is valid and the day is the 1st or the last day of its month
+  const day = date.getDate();
+  const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  if (isNaN(date.getTime()) || (day !== 1 && day !== lastDayOfMonth)) {
+    return { notFirstOrLastOfMonth: true }; // Invalid
   }
   
   return null; // Valid
@@ -30,7 +32,7 @@ export class FileDownloadComponent implements OnInit {
   @ViewChild('dateInput') dateInput!: ElementRef;
   reportForm = new FormGroup({
     rentRollDate: new FormControl('', [Validators.required,
-      isFirstOfMonth
+      isFirstOrLastOfMonth
     ]),
     projectName: new FormControl('', [
       //Validators.required,                    // Now required
