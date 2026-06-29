@@ -304,7 +304,7 @@
             <tbody>
               <tr *ngFor="let h of history; trackBy: trackByHistoryId">
                 <td class="history-table__file">{{ h.fileName }}</td>
-                <td>{{ h.uploadedAt | date:'medium' }}</td>
+                <td>{{ h.uploadedAt | date:'medium':'America/Toronto' }}</td>
                 <td>{{ h.total }}</td>
                 <td class="history-table__correct">✓ {{ h.excluded }}</td>
                 <td class="history-table__suggested">⚠ {{ h.suggested }}</td>
@@ -332,7 +332,7 @@
                 <div class="resume-draft__meta">
                   <span class="resume-draft__name">{{ d.fileName }}</span>
                   <span class="resume-draft__detail">
-                    Saved {{ d.savedAt | date:'medium' }}
+                    Saved {{ d.savedAt | date:'medium':'America/Toronto' }}
                   </span>
                 </div>
                 <button

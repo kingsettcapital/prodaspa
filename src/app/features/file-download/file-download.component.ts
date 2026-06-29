@@ -4,23 +4,22 @@ import { saveAs } from 'file-saver';
 import { FileService } from 'src/app/core/services/file.service';
 
 // 🛑 1. DEFINE THE CUSTOM VALIDATOR FUNCTION HERE (OUTSIDE THE CLASS)
-const isFirstOrLastOfMonth = (control: AbstractControl): ValidationErrors | null => {
-  const dateValue = control.value;
-
-  if (!dateValue) {
-    return null; 
-  }
-
-  const date = new Date(dateValue);
-
-  // Check the date is valid and the day is the 1st or the last day of its month
+function isFirstOrLastDayOfMonth(date: Date): boolean {
   const day = date.getDate();
   const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  if (isNaN(date.getTime()) || (day !== 1 && day !== lastDayOfMonth)) {
-    return { notFirstOrLastOfMonth: true }; // Invalid
+  return day === 1 || day === lastDayOfMonth;
+}
+
+const isFirstOrLastOfMonth = (control: AbstractControl): ValidationErrors | null => {
+  const dateValue = control.value;
+  if (!dateValue) {
+    return null;
   }
-  
-  return null; // Valid
+  const date = new Date(dateValue);
+  if (isNaN(date.getTime()) || !isFirstOrLastDayOfMonth(date)) {
+    return { notFirstOrLastOfMonth: true };
+  }
+  return null;
 };
 @Component({
   selector: 'app-file-download',
@@ -41,6 +40,12 @@ export class FileDownloadComponent implements OnInit {
   });
 
   maxDate: Date;
+  dateFilter = (d: Date | null): boolean => {
+    if (!d) {
+      return false;
+    }
+    return isFirstOrLastDayOfMonth(d);
+  };
   isDownloading = false;
   downloadMessage = '';
   isErrorMessage = false;
