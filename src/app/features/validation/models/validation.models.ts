@@ -56,8 +56,9 @@ export interface ParentValidationResponse {
   excluded: number;
   suggested: number;
   flagged: number;
-  new: number;
-  results: ParentValidationResult[];
+    new: number;
+    isCopiedFromTenant?: boolean;
+    results: ParentValidationResult[];
 }
 
 export interface BatchValidationResult {
@@ -102,6 +103,7 @@ export interface DownloadCorrectionsPayload {
   fileId: string;
   tenantCorrections: CorrectionItem[];
   parentCorrections: ParentCorrectionItem[];
+  copyTenantToParent: boolean;
 }
 
 export interface DraftCounts {

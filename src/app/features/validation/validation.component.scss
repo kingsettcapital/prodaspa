@@ -1039,3 +1039,21 @@ $upload-drag-bg: #eff6ff;
     align-items: flex-start;
   }
 }
+
+.parent-copy-prompt {
+  padding: 16px;
+  border: 1px dashed var(--ks-border, #cbd5e1);
+  border-radius: 8px;
+  background: #f8fafc;
+  margin-bottom: 12px;
+}
+.parent-copy-prompt__text {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #334155;
+}
+.parent-copy-prompt__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

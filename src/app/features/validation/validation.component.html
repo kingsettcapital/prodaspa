@@ -102,70 +102,98 @@
 
             <div class="field-group__body" *ngIf="isFieldGroupExpanded(fileIndex, fieldGroup.type)">
               <div
-                class="bucket"
-                *ngFor="let bucket of displayBuckets"
+                class="parent-copy-prompt"
+                *ngIf="fieldGroup.type === 'parent' && isParentCopyPending(fileIndex)"
               >
-                <div
-                  class="bucket__header"
-                  [ngClass]="bucket.headerClass"
-                  (click)="toggleSection(fileIndex, fieldGroup.type, bucket.key, $event)"
-                >
-                  <div class="bucket__header-left">
-                    <span class="bucket__chevron" aria-hidden="true">
-                      {{ isSectionExpanded(fileIndex, fieldGroup.type, bucket.key) ? '▾' : '▸' }}
-                    </span>
-                    <span>
-                      {{ bucket.label }} ({{ bucketCount(fileIndex, fieldGroup.type, bucket.key) }})
-                    </span>
-                  </div>
-                  <div
-                    class="bucket__header-actions"
-                    *ngIf="bucket.key === 'suggested'"
-                    (click)="$event.stopPropagation()"
+                <p class="parent-copy-prompt__text">
+                  This file doesn't include Parent Names. Copy each tenant name
+                  into the Parent Name field and validate them?
+                </p>
+                <div class="parent-copy-prompt__actions">
+                  <button
+                    type="button"
+                    class="bucket-btn bulk-action--green"
+                    (click)="confirmParentCopy(fileIndex)"
                   >
-                    <button
-                      type="button"
-                      class="bucket-btn bulk-action--green"
-                      [disabled]="applyAllSuggestionsCount(fileIndex, fieldGroup.type) === 0"
-                      (click)="requestBulkAction('apply-all', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
-                    >
-                      Apply All Suggestions
-                    </button>
-                  </div>
-                  <div
-                    class="bucket__header-actions"
-                    *ngIf="bucket.key === 'new'"
-                    (click)="$event.stopPropagation()"
+                    Copy tenant names as parent names
+                  </button>
+                  <button
+                    type="button"
+                    class="bucket-btn"
+                    (click)="cancelParentCopy(fileIndex, $event)"
                   >
-                    <button
-                      type="button"
-                      class="bucket-btn bulk-action--green"
-                      [disabled]="acceptAsIsEligibleCount(fileIndex, fieldGroup.type) === 0"
-                      (click)="requestBulkAction('accept-as-is', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
-                    >
-                      Accept All As-Is
-                    </button>
-                  </div>
-                </div>
-
-                <div
-                  class="bucket__table-wrap"
-                  *ngIf="isSectionExpanded(fileIndex, fieldGroup.type, bucket.key)"
-                >
-                  <app-validation-result-table
-                    [fieldType]="fieldGroup.type"
-                    [bucket]="bucket.key"
-                    [nameColumnLabel]="fieldGroup.nameColumnLabel"
-                    [rows]="rowsForDisplayBucket(fileIndex, fieldGroup.type, bucket.key)"
-                    [acceptedKeys]="tableAcceptedKeys(fileIndex, fieldGroup.type)"
-                    [correctionByKey]="tableCorrectionMap(fileIndex, fieldGroup.type)"
-                    (accept)="onTableAccept(fileIndex, fieldGroup.type, $event)"
-                    (overrideRequest)="onTableOverrideRequest(fileIndex, fieldGroup.type, $event)"
-                    (manual)="onTableManual(fileIndex, fieldGroup.type, $event)"
-                    (clear)="onTableClear(fileIndex, fieldGroup.type, $event)"
-                  ></app-validation-result-table>
+                    Cancel
+                  </button>
                 </div>
               </div>
+              <ng-container
+                *ngIf="fieldGroup.type !== 'parent' || !isParentCopyPending(fileIndex)"
+              >
+                <div
+                  class="bucket"
+                  *ngFor="let bucket of displayBuckets"
+                >
+                  <div
+                    class="bucket__header"
+                    [ngClass]="bucket.headerClass"
+                    (click)="toggleSection(fileIndex, fieldGroup.type, bucket.key, $event)"
+                  >
+                    <div class="bucket__header-left">
+                      <span class="bucket__chevron" aria-hidden="true">
+                        {{ isSectionExpanded(fileIndex, fieldGroup.type, bucket.key) ? '▾' : '▸' }}
+                      </span>
+                      <span>
+                        {{ bucket.label }} ({{ bucketCount(fileIndex, fieldGroup.type, bucket.key) }})
+                      </span>
+                    </div>
+                    <div
+                      class="bucket__header-actions"
+                      *ngIf="bucket.key === 'suggested'"
+                      (click)="$event.stopPropagation()"
+                    >
+                      <button
+                        type="button"
+                        class="bucket-btn bulk-action--green"
+                        [disabled]="applyAllSuggestionsCount(fileIndex, fieldGroup.type) === 0"
+                        (click)="requestBulkAction('apply-all', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
+                      >
+                        Apply All Suggestions
+                      </button>
+                    </div>
+                    <div
+                      class="bucket__header-actions"
+                      *ngIf="bucket.key === 'new'"
+                      (click)="$event.stopPropagation()"
+                    >
+                      <button
+                        type="button"
+                        class="bucket-btn bulk-action--green"
+                        [disabled]="acceptAsIsEligibleCount(fileIndex, fieldGroup.type) === 0"
+                        (click)="requestBulkAction('accept-as-is', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
+                      >
+                        Accept All As-Is
+                      </button>
+                    </div>
+                  </div>
+                  <div
+                    class="bucket__table-wrap"
+                    *ngIf="isSectionExpanded(fileIndex, fieldGroup.type, bucket.key)"
+                  >
+                    <app-validation-result-table
+                      [fieldType]="fieldGroup.type"
+                      [bucket]="bucket.key"
+                      [nameColumnLabel]="fieldGroup.nameColumnLabel"
+                      [rows]="rowsForDisplayBucket(fileIndex, fieldGroup.type, bucket.key)"
+                      [acceptedKeys]="tableAcceptedKeys(fileIndex, fieldGroup.type)"
+                      [correctionByKey]="tableCorrectionMap(fileIndex, fieldGroup.type)"
+                      (accept)="onTableAccept(fileIndex, fieldGroup.type, $event)"
+                      (overrideRequest)="onTableOverrideRequest(fileIndex, fieldGroup.type, $event)"
+                      (manual)="onTableManual(fileIndex, fieldGroup.type, $event)"
+                      (clear)="onTableClear(fileIndex, fieldGroup.type, $event)"
+                    ></app-validation-result-table>
+                  </div>
+                </div>
+              </ng-container>
             </div>
           </div>
 

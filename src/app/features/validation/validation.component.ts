@@ -238,6 +238,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     this.batchResults = [];
     this.expandedFiles = new Set<number>();
     this.expandedFieldGroups = new Set<string>();
+    this.parentCopyConfirmed.clear();
     this.expandedSections = new Set<string>();
     this.corrections = new Map<string, StoredCorrectionRecord>();
     this.downloadProgressByFile = new Map<number, DownloadChecklistState>();
@@ -335,6 +336,22 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   hasParentResponse(fileIndex: number): boolean {
     return this.batchResults[fileIndex]?.parentResponse != null;
+  }
+
+  private parentCopyConfirmed = new Set<number>();
+
+  isParentCopyPending(fileIndex: number): boolean {
+    const pr = this.batchResults[fileIndex]?.parentResponse;
+    return !!pr?.isCopiedFromTenant && !this.parentCopyConfirmed.has(fileIndex);
+  }
+
+  confirmParentCopy(fileIndex: number): void {
+    this.parentCopyConfirmed.add(fileIndex);
+  }
+
+  cancelParentCopy(fileIndex: number, event?: Event): void {
+    event?.stopPropagation();
+    this.toggleFieldGroup(fileIndex, 'parent');
   }
 
   fieldGroupsFor(fileIndex: number): FieldGroupConfig[] {
@@ -932,10 +949,14 @@ export class ValidationComponent implements OnInit, OnDestroy {
         matchSource: c.matchSource,
         appliesTo: c.appliesTo
       }));
+    const parentResponse = this.batchResults[fileIndex]?.parentResponse;
+    const copyTenantToParent =
+      !!parentResponse?.isCopiedFromTenant && this.parentCopyConfirmed.has(fileIndex);
     return {
       fileId: this.batchResults[fileIndex].fileId,
       tenantCorrections,
-      parentCorrections
+      parentCorrections,
+      copyTenantToParent
     };
   }
 
