@@ -1,0 +1,36 @@
+<h2 mat-dialog-title>Add Property</h2>
+
+<div mat-dialog-content class="dialog-body">
+  <form [formGroup]="form" (ngSubmit)="submit()" class="add-form">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Property ID</mat-label>
+      <input #propertyIdInput matInput formControlName="propertyId" maxlength="25" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Property Name</mat-label>
+      <input matInput formControlName="propertyName" maxlength="255" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Space Type</mat-label>
+      <mat-select formControlName="spaceTypeCode">
+        <mat-option *ngFor="let opt of spaceTypeOptions" [value]="opt.code">
+          {{ opt.label }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </form>
+
+  <p *ngIf="successMessage" class="feedback feedback--success">{{ successMessage }}</p>
+  <p *ngIf="errorMessage" class="feedback feedback--error">{{ errorMessage }}</p>
+</div>
+
+<div mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="done()">Done</button>
+  <button mat-flat-button color="primary" type="button"
+          [disabled]="form.invalid || submitting"
+          (click)="submit()">
+    Add
+  </button>
+</div>

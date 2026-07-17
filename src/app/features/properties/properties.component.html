@@ -1,0 +1,63 @@
+<div class="properties-page">
+  <div class="properties-header">
+    <h1>Kingsett's Properties</h1>
+    <button mat-flat-button color="primary" type="button" (click)="openAddProperty()">
+      <mat-icon>add</mat-icon>
+      Add Property
+    </button>
+  </div>
+
+  <div *ngIf="loading" class="state-row">
+    <mat-spinner diameter="36"></mat-spinner>
+  </div>
+
+  <div *ngIf="error && !loading" class="state-row error">{{ error }}</div>
+
+  <div class="table-card" *ngIf="!loading && !error">
+    <table mat-table [dataSource]="dataSource" class="properties-table">
+
+      <ng-container matColumnDef="index">
+        <th mat-header-cell *matHeaderCellDef class="col-index">#</th>
+        <td mat-cell *matCellDef="let row; let i = index" class="col-index">
+          {{ i + 1 }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="propertyId">
+        <th mat-header-cell *matHeaderCellDef class="col-id">Property ID</th>
+        <td mat-cell *matCellDef="let row" class="col-id">{{ row.propertyId }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="propertyName">
+        <th mat-header-cell *matHeaderCellDef class="col-name">Property Name</th>
+        <td mat-cell *matCellDef="let row" class="col-name">{{ row.propertyName }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="spaceTypeCode">
+        <th mat-header-cell *matHeaderCellDef class="col-type">Space Type</th>
+        <td mat-cell *matCellDef="let row" class="col-type">{{ row.spaceTypeCode }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef class="col-actions"></th>
+        <td mat-cell *matCellDef="let row" class="col-actions">
+          <button mat-icon-button [matMenuTriggerFor]="rowMenu"
+                  aria-label="Property actions">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #rowMenu="matMenu">
+            <button mat-menu-item (click)="removeProperty(row)">
+              <mat-icon>delete_outline</mat-icon>
+              <span>Remove property</span>
+            </button>
+          </mat-menu>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+    </table>
+
+    <div *ngIf="rowCount === 0" class="state-row">No properties found.</div>
+  </div>
+</div>

@@ -23,6 +23,10 @@ const routes: Routes = [
         path: 'validate',
         loadChildren: () => import('./features/validation/validation.module').then(m => m.ValidationModule),
       },
+      {
+        path: 'properties',
+        loadChildren: () => import('./features/properties/properties.module').then(m => m.PropertiesModule),
+      },
     ]
   },
   { path: '**', redirectTo: '' }

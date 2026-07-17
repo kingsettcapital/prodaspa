@@ -4,9 +4,12 @@ import { ReactiveFormsModule, FormsModule } from '@angular/forms';
 
 // Angular Material modules
 import { MatCardModule } from '@angular/material/card';
+import { MatTableModule } from '@angular/material/table';
+import { MatSortModule } from '@angular/material/sort';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatSidenavModule } from '@angular/material/sidenav';
@@ -27,9 +30,12 @@ import { MatTabsModule } from '@angular/material/tabs';
     ReactiveFormsModule,
     FormsModule,
     MatCardModule,
+    MatTableModule,
+    MatSortModule,
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     MatIconModule,
     MatToolbarModule,
     MatSidenavModule,
@@ -45,9 +51,12 @@ import { MatTabsModule } from '@angular/material/tabs';
     ReactiveFormsModule,
     FormsModule,
     MatCardModule,
+    MatTableModule,
+    MatSortModule,
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     MatIconModule,
     MatToolbarModule,
     MatSidenavModule,

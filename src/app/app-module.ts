@@ -43,7 +43,11 @@ export function MSALInterceptorConfigFactory(): MsalInterceptorConfiguration {
     protectedResourceMap.set(protectedResources.validationApi.baseUrl, null);
   }
 
-  protectedResourceMap.set(protectedResources.loginApi.endpoint, protectedResources.loginApi.scopes);
+      // Property master list is API-key gated on the gateway, not Bearer.
+      // Register as unprotected (null) BEFORE loginApi so it wins over the
+      // apiUrl entry when validationApiUrl and apiUrl share a host.
+      protectedResourceMap.set(`${protectedResources.validationApi.baseUrl.replace(/\/+$/, '')}/Property`, null);
+      protectedResourceMap.set(protectedResources.loginApi.endpoint, protectedResources.loginApi.scopes);
 
   return {
     interactionType: InteractionType.Redirect,

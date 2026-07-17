@@ -1,0 +1,107 @@
+.properties-page {
+  // Cap to the table's natural footprint so header + card share one width.
+  padding: 24px 32px 48px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.properties-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.properties-header button mat-icon {
+  margin-right: 4px;
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+}
+
+h1 {
+  margin: 0;
+  padding: 0;
+  font-size: 1.875rem;
+  font-weight: 600;
+  color: #111827;
+  line-height: 1.2;
+}
+
+.table-card {
+  background: #fff;
+  border: 1px solid #e2e5ea;
+  border-radius: 6px;
+  overflow: hidden;
+  // Card hugs the table; no stretch beyond column sum.
+  width: fit-content;
+  max-width: 100%;
+}
+
+// Fixed columns, auto table width — leftover space stays outside the table,
+// not between Property Name and Space Type.
+.properties-table {
+  width: auto;
+  table-layout: fixed;
+}
+
+.col-index {
+  width: 40px;
+  text-align: center;
+  color: #8a929c;
+  font-variant-numeric: tabular-nums;
+}
+.col-id   { width: 130px; }
+.col-name { width: 300px; } // keep name dominant but closer to Space Type
+.col-type { width: 110px; }
+.col-actions {
+  width: 56px;
+  text-align: right;
+  padding-left: 4px;
+  padding-right: 8px;
+}
+
+th.mat-header-cell,
+td.mat-cell {
+  padding: 12px 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+th.mat-header-cell.col-index,
+td.mat-cell.col-index {
+  padding-left: 12px;
+  padding-right: 4px;
+}
+
+th.mat-header-cell {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #5a6470;
+}
+
+td.mat-cell {
+  font-size: 14px;
+  color: #1f2933;
+}
+
+tr.mat-row {
+  transition: background 0.12s ease;
+}
+tr.mat-row:hover {
+  background: #f5f7fa;
+}
+
+.state-row {
+  padding: 24px 0;
+  display: flex;
+  justify-content: center;
+  color: #5a6470;
+}
+.state-row.error {
+  color: #b00020;
+}

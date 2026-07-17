@@ -23,7 +23,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   readonly headerTabs: HeaderTab[] = [
     { label: 'Generate File', path: '/generate-file' },
-    { label: 'Parent Tenant Mapping', path: '/validate' }
+    { label: 'Parent Tenant Mapping', path: '/validate' },
+    { label: 'Properties', path: '/properties' }
   ];
 
   constructor(
@@ -41,7 +42,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   navItems: NavItem[] = [
     { label: 'Generate File', icon: 'description', route: '/generate-file' },
-    { label: 'Validate File', icon: 'rule', route: '/validate' }
+    { label: 'Validate File', icon: 'rule', route: '/validate' },
+    { label: 'Properties', icon: 'apartment', route: '/properties' }
   ];
 
   ngOnInit(): void {
