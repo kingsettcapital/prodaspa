@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterModule, Routes } from '@angular/router';
 import { PropertiesComponent } from './properties.component';
 import { AddPropertyDialogComponent } from './add-property-dialog/add-property-dialog.component';
+import { ConfirmDialogComponent } from './confirm-dialog/confirm-dialog.component';
 import { SharedModule } from '../../shared/shared.module';
 
 const routes: Routes = [
@@ -12,7 +13,8 @@ const routes: Routes = [
 @NgModule({
   declarations: [
     PropertiesComponent,
-    AddPropertyDialogComponent
+    AddPropertyDialogComponent,
+    ConfirmDialogComponent
   ],
   imports: [
     CommonModule,

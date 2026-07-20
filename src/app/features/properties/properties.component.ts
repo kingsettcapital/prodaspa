@@ -4,6 +4,7 @@ import { MatTableDataSource } from '@angular/material/table';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { PropertyDto, PropertyService } from 'src/app/core/services/property.service';
 import { AddPropertyDialogComponent } from './add-property-dialog/add-property-dialog.component';
+import { ConfirmDialogComponent, ConfirmDialogData } from './confirm-dialog/confirm-dialog.component';
 
 @Component({
   selector: 'app-properties',
@@ -42,7 +43,44 @@ export class PropertiesComponent implements OnInit {
     });
   }
 
+  editProperty(row: PropertyDto): void {
+    const data: ConfirmDialogData = {
+      title: 'Edit property',
+      message:
+        `Editing is not available yet. ${row.propertyName} (${row.propertyId}) ` +
+        `cannot be changed from this screen at the moment.`
+    };
+
+    this.dialog.open(ConfirmDialogComponent, {
+      width: '440px',
+      autoFocus: true,
+      data
+    });
+  }
+
   removeProperty(row: PropertyDto): void {
+    const data: ConfirmDialogData = {
+      title: 'Remove property?',
+      message: `${row.propertyId} (${row.propertyName}) will be removed as an active property.`,
+      confirmLabel: 'Remove',
+      cancelLabel: 'Cancel',
+      tone: 'danger'
+    };
+
+    const ref = this.dialog.open(ConfirmDialogComponent, {
+      width: '440px',
+      autoFocus: true,
+      data
+    });
+
+    ref.afterClosed().subscribe((confirmed: boolean | undefined) => {
+      if (confirmed) {
+        this.performRemove(row);
+      }
+    });
+  }
+
+  private performRemove(row: PropertyDto): void {
     this.propertyService.deactivateProperty(row.propertyId).subscribe({
       next: () => {
         this.dataSource.data = this.dataSource.data.filter(

@@ -87,13 +87,15 @@ $row-hover: #f5f7fa;
   table-layout: fixed;
 }
 
-// Property Name takes the slack; the rest are content-sized.
-$actions-col-width: 3.5rem;
+// ID and Space Type are content-sized; Property Name absorbs the remainder.
+$actions-col-width: 6rem;
+$id-col-width: 9rem;
+$type-col-width: 7rem;
 
-.col-id,
-.col-name,
-.col-type {
-  width: calc((100% - #{$actions-col-width}) / 3);
+.col-id   { width: $id-col-width; }
+.col-type { width: $type-col-width; }
+.col-name {
+  width: calc(100% - #{$id-col-width} - #{$type-col-width} - #{$actions-col-width});
 }
 
 .col-actions {
@@ -152,14 +154,15 @@ tr.mat-row {
 
 // Kebab is quiet until the row is engaged. :focus-within keeps it reachable
 // by keyboard.
-// mat-icon-button is 40x40 by default, which was forcing a 56px row.
-// Constraining it to 32px is what brings the row to 44px.
-.row-actions__trigger.mat-icon-button {
+// mat-icon-button is 40x40 by default, which forces a taller row.
+// Constraining to 32px keeps the row at its current height.
+.row-action.mat-icon-button {
   width: 32px;
   height: 32px;
   line-height: 32px;
-  opacity: 0;
-  transition: opacity 0.12s ease;
+  opacity: 0.55;
+  transition: opacity 0.12s ease, color 0.12s ease;
+  color: $text-secondary;
 
   .mat-icon {
     font-size: 18px;
@@ -167,10 +170,20 @@ tr.mat-row {
     height: 18px;
     line-height: 18px;
   }
+
+  &:hover,
+  &:focus-visible {
+    opacity: 1;
+  }
 }
 
-tr.mat-row:hover .row-actions__trigger.mat-icon-button,
-tr.mat-row:focus-within .row-actions__trigger.mat-icon-button {
+.row-action--remove:hover,
+.row-action--remove:focus-visible {
+  color: #b00020;
+}
+
+tr.mat-row:hover .row-action.mat-icon-button,
+tr.mat-row:focus-within .row-action.mat-icon-button {
   opacity: 1;
 }
 
