@@ -1,107 +1,186 @@
+// Tokens mirrored from the Validation page so Properties reads as part of the
+// same app shell. Do not diverge without updating both.
+$page-bg: #f9fafb;
+$card-border: #e5e7eb;
+$header-strip: #f9fafb;
+$text-primary: #111827;
+$text-secondary: #4b5563;
+$cell-text: #374151;
+$row-divider: #f3f4f6;
+$row-hover: #f5f7fa;
+
 .properties-page {
-  // Cap to the table's natural footprint so header + card share one width.
-  padding: 24px 32px 48px;
-  max-width: 720px;
+  min-height: 100%;
+  background: $page-bg;
+  padding: 2rem;
+  box-sizing: border-box;
+}
+
+.properties-page__inner {
+  max-width: 52rem;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
 .properties-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 28px;
-}
+  &__title {
+    margin: 0 0 0.5rem;
+    padding: 0;
+    font-size: 1.875rem;
+    font-weight: 600;
+    color: $text-primary;
+    line-height: 1.2;
+  }
 
-.properties-header button mat-icon {
-  margin-right: 4px;
-  font-size: 20px;
-  width: 20px;
-  height: 20px;
-}
-
-h1 {
-  margin: 0;
-  padding: 0;
-  font-size: 1.875rem;
-  font-weight: 600;
-  color: #111827;
-  line-height: 1.2;
+  &__subtitle {
+    margin: 0;
+    font-size: 1rem;
+    color: $text-secondary;
+    line-height: 1.5;
+  }
 }
 
 .table-card {
-  background: #fff;
-  border: 1px solid #e2e5ea;
-  border-radius: 6px;
   overflow: hidden;
-  // Card hugs the table; no stretch beyond column sum.
-  width: fit-content;
-  max-width: 100%;
+  border: 1px solid $card-border;
+  border-radius: 0.75rem;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 1rem;
+    background: $header-strip;
+    border-bottom: 1px solid $card-border;
+  }
+
+  // Constrain the Add button so it stops setting the strip height.
+  &__header button.mat-flat-button {
+    height: 36px;
+    line-height: 36px;
+    padding: 0 1rem;
+  }
+
+  &__label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: $text-secondary;
+  }
+
+  &__header button mat-icon {
+    margin-right: 4px;
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
 }
 
-// Fixed columns, auto table width — leftover space stays outside the table,
-// not between Property Name and Space Type.
 .properties-table {
-  width: auto;
+  width: 100%;
   table-layout: fixed;
 }
 
+// Property Name takes the slack; the rest are content-sized.
+$actions-col-width: 3.5rem;
+
+.col-id,
+.col-name,
+.col-type {
+  width: calc((100% - #{$actions-col-width}) / 3);
+}
+
+.col-actions {
+  width: $actions-col-width;
+  text-align: right;
+  padding-left: 0.25rem;
+  padding-right: 0.5rem;
+}
+
+// Retained for the currently-unused index column (see template).
 .col-index {
-  width: 40px;
+  width: 2.5rem;
   text-align: center;
   color: #8a929c;
   font-variant-numeric: tabular-nums;
 }
-.col-id   { width: 130px; }
-.col-name { width: 300px; } // keep name dominant but closer to Space Type
-.col-type { width: 110px; }
-.col-actions {
-  width: 56px;
-  text-align: right;
-  padding-left: 4px;
-  padding-right: 8px;
-}
 
 th.mat-header-cell,
 td.mat-cell {
-  padding: 12px 14px;
+  padding: 0.375rem 1rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-th.mat-header-cell.col-index,
-td.mat-cell.col-index {
-  padding-left: 12px;
-  padding-right: 4px;
+td.mat-cell {
+  line-height: 1.25rem;
+  vertical-align: middle;
 }
 
 th.mat-header-cell {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #5a6470;
+  color: $text-secondary;
+  border-bottom: 1px solid $card-border;
 }
 
 td.mat-cell {
-  font-size: 14px;
-  color: #1f2933;
+  font-size: 0.875rem;
+  color: $cell-text;
 }
 
 tr.mat-row {
   transition: background 0.12s ease;
+
+  td.mat-cell {
+    border-bottom: 1px solid $row-divider;
+  }
+
+  &:hover {
+    background: $row-hover;
+  }
 }
-tr.mat-row:hover {
-  background: #f5f7fa;
+
+// Kebab is quiet until the row is engaged. :focus-within keeps it reachable
+// by keyboard.
+// mat-icon-button is 40x40 by default, which was forcing a 56px row.
+// Constraining it to 32px is what brings the row to 44px.
+.row-actions__trigger.mat-icon-button {
+  width: 32px;
+  height: 32px;
+  line-height: 32px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+
+  .mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+  }
+}
+
+tr.mat-row:hover .row-actions__trigger.mat-icon-button,
+tr.mat-row:focus-within .row-actions__trigger.mat-icon-button {
+  opacity: 1;
 }
 
 .state-row {
-  padding: 24px 0;
+  padding: 1.5rem 0;
   display: flex;
   justify-content: center;
-  color: #5a6470;
+  color: $text-secondary;
 }
+
 .state-row.error {
   color: #b00020;
 }

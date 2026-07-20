@@ -12,7 +12,7 @@ import { AddPropertyDialogComponent } from './add-property-dialog/add-property-d
   styleUrls: ['./properties.component.scss']
 })
 export class PropertiesComponent implements OnInit {
-  displayedColumns = ['index', 'propertyId', 'propertyName', 'spaceTypeCode', 'actions'];
+  displayedColumns = ['propertyId', 'propertyName', 'spaceTypeCode', 'actions'];
   dataSource = new MatTableDataSource<PropertyDto>([]);
   loading = true;
   error: string | null = null;
