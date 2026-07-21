@@ -1,5 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
+import { MatPaginator } from '@angular/material/paginator';
+import { MatSort } from '@angular/material/sort';
 import { MatTableDataSource } from '@angular/material/table';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { PropertyDto, PropertyService } from 'src/app/core/services/property.service';
@@ -16,6 +18,23 @@ import { EditPropertyDialogComponent } from './edit-property-dialog/edit-propert
 export class PropertiesComponent implements OnInit {
   displayedColumns = ['propertyId', 'propertyName', 'spaceTypeCode', 'actions'];
   dataSource = new MatTableDataSource<PropertyDto>([]);
+  pageSize = 25;
+  pageSizeOptions = [25, 50, 100];
+  @ViewChild(MatPaginator)
+  set paginator(value: MatPaginator) {
+    if (value) {
+      this.dataSource.paginator = value;
+    }
+  }
+
+  @ViewChild(MatSort)
+  set sort(value: MatSort) {
+    if (value) {
+      this.dataSource.sort = value;
+    }
+  }
+
+  searchTerm = '';
   loading = true;
   error: string | null = null;
 
@@ -26,7 +45,41 @@ export class PropertiesComponent implements OnInit {
   ) { }
 
   ngOnInit(): void {
+    this.configureDataSource();
     this.loadProperties();
+  }
+
+  private configureDataSource(): void {
+    // Digit runs are zero-padded so ordinary string comparison orders
+    // addresses the way a person reads them: 10, 100, 101, 1175.
+    // Without this, lexicographic sort gives 10, 100, 1175, 101.
+    const naturalKey = (value: string): string =>
+      (value ?? '').toLowerCase().replace(/\d+/g, m => m.padStart(10, '0'));
+
+    this.dataSource.sortingDataAccessor = (row, columnId) => {
+      switch (columnId) {
+        case 'propertyId':
+          return naturalKey(row.propertyId);
+        case 'propertyName':
+          return naturalKey(row.propertyName);
+        case 'spaceTypeCode':
+          return (row.spaceTypeCode ?? '').toLowerCase();
+        default:
+          return '';
+      }
+    };
+
+    this.dataSource.filterPredicate = (row, filter) => {
+      const criteria = JSON.parse(filter) as { search: string };
+      const term = (criteria.search ?? '').trim().toLowerCase();
+      if (!term) {
+        return true;
+      }
+      return (row.propertyId ?? '').toLowerCase().includes(term)
+        || (row.propertyName ?? '').toLowerCase().includes(term);
+    };
+
+    this.applySearch();
   }
 
   openAddProperty(): void {
@@ -101,12 +154,31 @@ export class PropertiesComponent implements OnInit {
     });
   }
 
-  applyFilter(event: Event): void {
-    this.dataSource.filter = (event.target as HTMLInputElement).value.trim().toLowerCase();
+  onSearchInput(event: Event): void {
+    this.searchTerm = (event.target as HTMLInputElement).value;
+    this.applySearch();
+  }
+
+  clearSearch(): void {
+    this.searchTerm = '';
+    this.applySearch();
+  }
+
+  private applySearch(): void {
+    this.dataSource.filter = JSON.stringify({ search: this.searchTerm });
+    // Without this, filtering while on a later page leaves the user
+    // looking at an empty table.
+    if (this.dataSource.paginator) {
+      this.dataSource.paginator.firstPage();
+    }
   }
 
   get rowCount(): number {
     return this.dataSource.filteredData.length;
+  }
+
+  get totalCount(): number {
+    return this.dataSource.data.length;
   }
 
   private loadProperties(): void {
