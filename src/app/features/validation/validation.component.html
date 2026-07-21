@@ -446,4 +446,43 @@
       </div>
     </div>
   </div>
+
+  <div
+    class="confirm-overlay"
+    *ngIf="pendingAmbiguousNotice"
+    (click)="dismissAmbiguousNotice()"
+  >
+    <div
+      class="confirm-dialog confirm-dialog--notice"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="ambiguous-notice-title"
+      (click)="$event.stopPropagation()"
+    >
+      <h2 id="ambiguous-notice-title" class="confirm-dialog__title">
+        Rows needing manual review
+      </h2>
+      <p class="confirm-dialog__description">
+        These names contain AND/OR and cannot be accepted as-is automatically.
+        Enter the correct name on each row.
+      </p>
+      <ul class="confirm-dialog__list">
+        <li *ngFor="let row of pendingAmbiguousNotice.rows">
+          <span class="confirm-dialog__list-meta">
+            {{ noticeUnit(row) }} · {{ noticeBuilding(row) }}
+          </span>
+          <span class="confirm-dialog__list-name">{{ row.tenantName }}</span>
+        </li>
+      </ul>
+      <div class="confirm-dialog__actions">
+        <button
+          type="button"
+          class="confirm-dialog__btn confirm-dialog__btn--confirm"
+          (click)="dismissAmbiguousNotice()"
+        >
+          Got it
+        </button>
+      </div>
+    </div>
+  </div>
 </div>

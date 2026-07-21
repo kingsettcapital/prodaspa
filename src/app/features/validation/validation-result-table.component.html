@@ -38,6 +38,7 @@
                 *ngIf="showAcceptTick(row)"
                 type="button"
                 class="action-cell__accept-btn"
+                [disabled]="isAcceptDisabled(row)"
                 [title]="isAcceptAsIs(row) ? 'Accept as-is' : 'Accept suggestion'"
                 (mousedown)="onAcceptMouseDown($event, row)"
               >

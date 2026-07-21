@@ -65,6 +65,12 @@ interface PendingBulkAction {
   fieldLabel: string;
 }
 
+interface PendingAmbiguousNotice {
+  fileIndex: number;
+  fieldType: FieldType;
+  rows: ValidationRow[];
+}
+
 interface BulkConfirmConfig {
   label: string;
   description: (fieldLabel: string) => string;
@@ -146,6 +152,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
   draftsLoading = false;
   draftsError: string | null = null;
   pendingBulkAction: PendingBulkAction | null = null;
+  pendingAmbiguousNotice: PendingAmbiguousNotice | null = null;
   pendingOverride: PendingOverride | null = null;
 
   readonly downloadStepLabels = [
@@ -612,6 +619,10 @@ export class ValidationComponent implements OnInit, OnDestroy {
       this.cancelBulkAction();
       return;
     }
+    if (this.pendingAmbiguousNotice) {
+      this.dismissAmbiguousNotice();
+      return;
+    }
     if (this.pendingOverride) {
       this.cancelOverride();
     }
@@ -624,8 +635,51 @@ export class ValidationComponent implements OnInit, OnDestroy {
   acceptAsIsEligibleCount(fileIndex: number, fieldType: FieldType): number {
     const acceptedKeys = this.tableAcceptedKeys(fileIndex, fieldType);
     return this.rowsForDisplayBucket(fileIndex, fieldType, 'new')
-      .filter(row => !acceptedKeys.has(this.tableRowKey(fieldType, row)))
+      .filter(row =>
+        !row.isAmbiguousMultiParty
+        && !acceptedKeys.has(this.tableRowKey(fieldType, row)))
       .length;
+  }
+
+  ambiguousNewRows(fileIndex: number, fieldType: FieldType): ValidationRow[] {
+    return this.rowsForDisplayBucket(fileIndex, fieldType, 'new')
+      .filter(r => !!r.isAmbiguousMultiParty);
+  }
+
+  dismissAmbiguousNotice(): void {
+    this.pendingAmbiguousNotice = null;
+  }
+
+  noticeUnit(row: ValidationRow): string {
+    const applies = this.noticeAppliesTo(row);
+    if (applies.length === 0) {
+      return '—';
+    }
+    const first = applies[0].unit?.trim() || '—';
+    return applies.length > 1 ? `${first} (+${applies.length - 1} more)` : first;
+  }
+
+  noticeBuilding(row: ValidationRow): string {
+    const applies = this.noticeAppliesTo(row);
+    if (applies.length === 0) {
+      return '—';
+    }
+    const first = applies[0].building?.trim() || '—';
+    return applies.length > 1 ? `${first} (+${applies.length - 1} more)` : first;
+  }
+
+  private noticeAppliesTo(row: ValidationRow): ParentAppliesToItem[] {
+    if (!this.pendingAmbiguousNotice) {
+      return [];
+    }
+    if (this.pendingAmbiguousNotice.fieldType === 'tenant') {
+      const tenant = row as ValidationResult;
+      if (tenant.appliesTo?.length) {
+        return tenant.appliesTo;
+      }
+      return [{ building: tenant.buildingName, unit: tenant.unitId }];
+    }
+    return (row as ParentValidationResult).appliesTo ?? [];
   }
 
   applyAllSuggestionsCount(fileIndex: number, fieldType: FieldType): number {
@@ -700,7 +754,15 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   private executeAcceptAllAsIs(fileIndex: number, fieldType: FieldType): void {
     for (const row of this.rowsForDisplayBucket(fileIndex, fieldType, 'new')) {
+      if (row.isAmbiguousMultiParty) {
+        continue;
+      }
       this.acceptRow(fileIndex, fieldType, row);
+    }
+
+    const ambiguous = this.ambiguousNewRows(fileIndex, fieldType);
+    if (ambiguous.length > 0) {
+      this.pendingAmbiguousNotice = { fileIndex, fieldType, rows: ambiguous };
     }
   }
 

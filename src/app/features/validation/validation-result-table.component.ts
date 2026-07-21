@@ -131,6 +131,13 @@ export class ValidationResultTableComponent {
     return this.hasSuggestion(row) || this.isAcceptAsIs(row);
   }
 
+  isAcceptDisabled(row: ValidationRow): boolean {
+    if (!row.isAmbiguousMultiParty) {
+      return false;
+    }
+    return !this.correctionText(row);
+  }
+
   overrideTriggerLabel(row: ValidationRow): string {
     return this.showAcceptTick(row) ? 'Or type override' : 'Correct name';
   }
@@ -158,7 +165,7 @@ export class ValidationResultTableComponent {
       return (row.suggestion ?? row.suggestedName) as string;
     }
     if (this.bucket === 'new' && this.isAcceptAsIs(row)) {
-      return row.tenantName;
+      return row.isAmbiguousMultiParty ? '—' : row.tenantName;
     }
     if (this.bucket === 'flagged' && this.hasSuggestion(row)) {
       return (row.suggestion ?? row.suggestedName) as string;
@@ -192,6 +199,9 @@ export class ValidationResultTableComponent {
   onAcceptMouseDown(event: MouseEvent, row: ValidationRow): void {
     event.preventDefault();
     event.stopPropagation();
+    if (this.isAcceptDisabled(row)) {
+      return;
+    }
     this.accept.emit(row);
   }
 
