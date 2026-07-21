@@ -1,18 +1,23 @@
-<h2 mat-dialog-title>Add Property</h2>
+<div mat-dialog-title class="dialog-header">
+  <h2 class="dialog-header__title">Add Property</h2>
+  <p class="dialog-header__subtitle">
+    Creates an active property in the system of record. You can add more before closing.
+  </p>
+</div>
 
 <div mat-dialog-content class="dialog-body">
   <form [formGroup]="form" (ngSubmit)="submit()" class="add-form">
-    <mat-form-field appearance="outline" class="full-width">
+    <mat-form-field appearance="outline" class="full-width" floatLabel="always">
       <mat-label>Property ID</mat-label>
       <input #propertyIdInput matInput formControlName="propertyId" maxlength="25" />
     </mat-form-field>
 
-    <mat-form-field appearance="outline" class="full-width">
+    <mat-form-field appearance="outline" class="full-width" floatLabel="always">
       <mat-label>Property Name</mat-label>
       <input matInput formControlName="propertyName" maxlength="255" />
     </mat-form-field>
 
-    <mat-form-field appearance="outline" class="full-width">
+    <mat-form-field appearance="outline" class="full-width" floatLabel="always">
       <mat-label>Space Type</mat-label>
       <mat-select formControlName="spaceTypeCode">
         <mat-option *ngFor="let opt of spaceTypeOptions" [value]="opt.code">
@@ -22,15 +27,17 @@
     </mat-form-field>
   </form>
 
-  <p *ngIf="successMessage" class="feedback feedback--success">{{ successMessage }}</p>
-  <p *ngIf="errorMessage" class="feedback feedback--error">{{ errorMessage }}</p>
+  <div class="feedback-slot" *ngIf="successMessage || errorMessage">
+    <p *ngIf="successMessage" class="feedback feedback--success">{{ successMessage }}</p>
+    <p *ngIf="errorMessage" class="feedback feedback--error">{{ errorMessage }}</p>
+  </div>
 </div>
 
-<div mat-dialog-actions align="end">
+<div mat-dialog-actions class="dialog-actions" align="end">
   <button mat-button type="button" (click)="done()">Done</button>
   <button mat-flat-button color="primary" type="button"
           [disabled]="form.invalid || submitting"
           (click)="submit()">
-    Add
+    Add property
   </button>
 </div>

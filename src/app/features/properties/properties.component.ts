@@ -5,6 +5,7 @@ import { NotificationService } from 'src/app/core/services/notification.service'
 import { PropertyDto, PropertyService } from 'src/app/core/services/property.service';
 import { AddPropertyDialogComponent } from './add-property-dialog/add-property-dialog.component';
 import { ConfirmDialogComponent, ConfirmDialogData } from './confirm-dialog/confirm-dialog.component';
+import { EditPropertyDialogComponent } from './edit-property-dialog/edit-property-dialog.component';
 
 @Component({
   selector: 'app-properties',
@@ -44,17 +45,23 @@ export class PropertiesComponent implements OnInit {
   }
 
   editProperty(row: PropertyDto): void {
-    const data: ConfirmDialogData = {
-      title: 'Edit property',
-      message:
-        `Editing is not available yet. ${row.propertyName} (${row.propertyId}) ` +
-        `cannot be changed from this screen at the moment.`
-    };
-
-    this.dialog.open(ConfirmDialogComponent, {
+    const ref = this.dialog.open(EditPropertyDialogComponent, {
       width: '440px',
       autoFocus: true,
-      data
+      data: row
+    });
+
+    ref.afterClosed().subscribe((updated: PropertyDto | undefined) => {
+      if (!updated) {
+        return;
+      }
+
+      // Update in place rather than refetching: the user is looking at this
+      // row, and a refetch would reset scroll position for no benefit.
+      this.dataSource.data = this.dataSource.data.map(r =>
+        r.propertyId === updated.propertyId ? updated : r
+      );
+      this.notification.success('Property updated.');
     });
   }
 

@@ -41,6 +41,17 @@ export class PropertyService {
     );
   }
 
+  updateProperty(
+    propertyId: string,
+    payload: { propertyName: string; spaceTypeCode: string }
+  ): Observable<PropertyDto> {
+    return this.http.put<PropertyDto>(
+      this.buildUrl(`Property/${encodeURIComponent(propertyId)}`),
+      payload,
+      { headers: this.defaultHeaders() }
+    );
+  }
+
   createProperty(payload: {
     propertyId: string;
     propertyName: string;

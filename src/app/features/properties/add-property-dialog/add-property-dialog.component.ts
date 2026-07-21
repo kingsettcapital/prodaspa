@@ -3,6 +3,7 @@ import { Component, ElementRef, ViewChild } from '@angular/core';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { MatDialogRef } from '@angular/material/dialog';
 import { PropertyService } from 'src/app/core/services/property.service';
+import { SPACE_TYPE_OPTIONS } from '../space-types';
 
 @Component({
   selector: 'app-add-property-dialog',
@@ -13,12 +14,7 @@ import { PropertyService } from 'src/app/core/services/property.service';
 export class AddPropertyDialogComponent {
   @ViewChild('propertyIdInput') propertyIdInput!: ElementRef<HTMLInputElement>;
 
-  readonly spaceTypeOptions = [
-    { code: 'OF', label: 'Office (OF)' },
-    { code: 'RT', label: 'Retail (RT)' },
-    { code: 'IND', label: 'Industrial (IND)' },
-    { code: 'OTH', label: 'Other (OTH)' }
-  ];
+  readonly spaceTypeOptions = SPACE_TYPE_OPTIONS;
 
   form = new FormGroup({
     propertyId: new FormControl('', [Validators.required, Validators.maxLength(25)]),
