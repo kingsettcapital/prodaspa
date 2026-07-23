@@ -1,0 +1,68 @@
+<table class="results-table">
+  <thead>
+    <tr>
+      <th>Unit</th>
+      <th>Building</th>
+      <th>{{ nameColumnLabel }}</th>
+      <th>{{ secondColumnHeader }}</th>
+      <th>Confidence</th>
+      <th>Reason</th>
+      <th *ngIf="showActionColumn || showAcceptedIndicator">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr
+      *ngFor="let row of rows; trackBy: trackByRow"
+      [ngClass]="rowBorderClass(row)"
+      [class.row-accepted]="isAccepted(row) && bucket !== 'excluded'"
+    >
+      <td>{{ unitDisplay(row) }}</td>
+      <td>{{ buildingDisplay(row) }}</td>
+      <td>{{ row.tenantName }}</td>
+      <td>{{ suggestedDisplay(row) }}</td>
+      <td>{{ confidenceDisplay(row) }}</td>
+      <td>{{ row.reason }}</td>
+      <td *ngIf="showActionColumn || showAcceptedIndicator" class="action-cell">
+        <div class="action-cell__inner" (click)="onActionClick($event)">
+          <ng-container *ngIf="isAccepted(row); else actionPending">
+            <span class="action-cell__accepted" title="Accepted correction">
+              ✓ Corrected: {{ correctionText(row) }}
+            </span>
+            <button type="button" class="action-cell__undo" (click)="clear.emit(row)">
+              Undo
+            </button>
+          </ng-container>
+          <ng-template #actionPending>
+            <ng-container *ngIf="bucket !== 'excluded'">
+              <button
+                *ngIf="showAcceptTick(row)"
+                type="button"
+                class="action-cell__accept-btn"
+                [disabled]="isAcceptDisabled(row)"
+                [title]="isAcceptAsIs(row) ? 'Accept as-is' : 'Accept suggestion'"
+                (mousedown)="onAcceptMouseDown($event, row)"
+              >
+                ✓
+              </button>
+              <button
+                type="button"
+                class="action-cell__override-btn"
+                (click)="onOverrideClick($event, row)"
+              >
+                {{ overrideTriggerLabel(row) }}
+              </button>
+            </ng-container>
+            <span
+              *ngIf="bucket === 'excluded'"
+              class="action-cell__exact"
+              title="Tenant name already matches the master list"
+            >
+              ✓ Exact match
+            </span>
+          </ng-template>
+        </div>
+      </td>
+    </tr>
+  </tbody>
+</table>
+<p class="results-table__empty" *ngIf="rows.length === 0">No rows in this bucket.</p>

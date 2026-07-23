@@ -1,0 +1,55 @@
+$card-border: #e5e7eb;
+$text-secondary: #4b5563;
+
+.results-table {
+  width: 100%;
+  min-width: 40rem;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  text-align: left;
+
+  thead {
+    border-bottom: 1px solid $card-border;
+    background: #f9fafb;
+
+    th {
+      padding: 0.5rem 1rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: $text-secondary;
+    }
+  }
+
+  tbody tr {
+    border-bottom: 1px solid #f3f4f6;
+    border-left: 4px solid transparent;
+
+    td {
+      padding: 0.5rem 1rem;
+      color: #374151;
+      vertical-align: top;
+    }
+
+    &.row-accepted {
+      background: #f0fdf4;
+    }
+  }
+
+  .row-border--new {
+    border-left-color: #3b82f6;
+  }
+
+  .row-border--flagged {
+    border-left-color: #ef4444;
+  }
+
+  .row-border--suggested {
+    border-left-color: #fbbf24;
+  }
+
+  .row-border--correct {
+    border-left-color: #22c55e;
+  }
+}

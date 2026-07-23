@@ -3,7 +3,7 @@ import { ApiService } from './api.service';
 
 @Injectable({ providedIn: 'root' })
 export class FileService {
-    private apiUrl = 'https://prodagatewaydev.kingsettcapital.com/Proda/download';
+    private apiUrl = 'https://prodagatewaydev.kingsettcapital.com/Proda/download'; 
 
     constructor(private api: ApiService) { }
 

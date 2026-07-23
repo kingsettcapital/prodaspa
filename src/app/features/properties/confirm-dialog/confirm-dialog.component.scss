@@ -1,0 +1,15 @@
+.dialog-body {
+  min-width: 320px;
+  padding-top: 4px;
+}
+
+.dialog-message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #374151;
+}
+
+mat-dialog-actions {
+  gap: 8px;
+}

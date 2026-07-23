@@ -1,0 +1,37 @@
+<div class="override-popover" (mousedown)="$event.stopPropagation()">
+  <p class="override-popover__title">Type override</p>
+  <p class="override-popover__original">
+    <span class="override-popover__original-label">Original</span>
+    {{ originalName }}
+  </p>
+  <label class="override-popover__field">
+    <span class="override-popover__field-label">Corrected name</span>
+    <input
+      #draftInput
+      type="text"
+      class="override-popover__input"
+      [placeholder]="placeholder"
+      [(ngModel)]="draftValue"
+      (keydown.enter)="onSave()"
+      (keydown.escape)="onCancel()"
+    />
+  </label>
+  <div class="override-popover__actions">
+    <button
+      type="button"
+      class="override-popover__btn override-popover__btn--primary"
+      (mousedown)="$event.preventDefault()"
+      (click)="onSave()"
+    >
+      Save
+    </button>
+    <button
+      type="button"
+      class="override-popover__btn"
+      (mousedown)="$event.preventDefault()"
+      (click)="onCancel()"
+    >
+      Cancel
+    </button>
+  </div>
+</div>

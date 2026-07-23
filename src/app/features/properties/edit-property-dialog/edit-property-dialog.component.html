@@ -1,0 +1,36 @@
+<h2 mat-dialog-title>Edit Property</h2>
+
+<div mat-dialog-content class="dialog-body">
+  <form [formGroup]="form" (ngSubmit)="submit()" class="edit-form">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Property ID</mat-label>
+      <input matInput [value]="property.propertyId" disabled />
+      <mat-hint>Property ID cannot be changed.</mat-hint>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Property Name</mat-label>
+      <input matInput formControlName="propertyName" maxlength="255" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Space Type</mat-label>
+      <mat-select formControlName="spaceTypeCode">
+        <mat-option *ngFor="let opt of spaceTypeOptions" [value]="opt.code">
+          {{ opt.label }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </form>
+
+  <p *ngIf="errorMessage" class="feedback feedback--error">{{ errorMessage }}</p>
+</div>
+
+<div mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cancel()">Cancel</button>
+  <button mat-flat-button color="primary" type="button"
+          [disabled]="!canSave"
+          (click)="submit()">
+    Save
+  </button>
+</div>

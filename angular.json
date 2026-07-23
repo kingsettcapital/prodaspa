@@ -63,8 +63,8 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "6kb",
-                  "maximumError": "50kb"
+                  "maximumWarning": "2mb",
+                  "maximumError": "15mb"
                 }
               ]
             },
@@ -90,8 +90,8 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "6kb",
-                  "maximumError": "50kb"
+                  "maximumWarning": "2mb",
+                  "maximumError": "15mb"
                 }
               ]
             },
@@ -116,13 +116,33 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "6kb",
-                  "maximumError": "50kb"
+                  "maximumWarning": "2mb",
+                  "maximumError": "15mb"
+                }
+              ]
+            },
+            "local": {
+              "buildOptimizer": false,
+              "optimization": false,
+              "vendorChunk": true,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "namedChunks": true,
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "2mb",
+                  "maximumError": "15mb"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "2mb",
+                  "maximumError": "15mb"
                 }
               ]
             }
-          },
-          "defaultConfiguration": "dev"
+          }
+          // "defaultConfiguration": "dev"
         },
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
@@ -132,6 +152,9 @@
             },
             "development": {
               "browserTarget": "kingsett:build:dev"
+            },
+            "local": {
+              "browserTarget": "kingsett:build:local"
             }
           },
           "defaultConfiguration": "development"

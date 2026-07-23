@@ -4,21 +4,22 @@ import { saveAs } from 'file-saver';
 import { FileService } from 'src/app/core/services/file.service';
 
 // 🛑 1. DEFINE THE CUSTOM VALIDATOR FUNCTION HERE (OUTSIDE THE CLASS)
-const isFirstOfMonth = (control: AbstractControl): ValidationErrors | null => {
+function isFirstOrLastDayOfMonth(date: Date): boolean {
+  const day = date.getDate();
+  const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  return day === 1 || day === lastDayOfMonth;
+}
+
+const isFirstOrLastOfMonth = (control: AbstractControl): ValidationErrors | null => {
   const dateValue = control.value;
-
   if (!dateValue) {
-    return null; 
+    return null;
   }
-
   const date = new Date(dateValue);
-
-  // Check if the date is valid and the day is the 1st
-  if (isNaN(date.getTime()) || date.getDate() !== 1) {
-    return { notFirstOfMonth: true }; // Invalid
+  if (isNaN(date.getTime()) || !isFirstOrLastDayOfMonth(date)) {
+    return { notFirstOrLastOfMonth: true };
   }
-  
-  return null; // Valid
+  return null;
 };
 @Component({
   selector: 'app-file-download',
@@ -30,7 +31,7 @@ export class FileDownloadComponent implements OnInit {
   @ViewChild('dateInput') dateInput!: ElementRef;
   reportForm = new FormGroup({
     rentRollDate: new FormControl('', [Validators.required,
-      isFirstOfMonth
+      isFirstOrLastOfMonth
     ]),
     projectName: new FormControl('', [
       //Validators.required,                    // Now required
@@ -39,6 +40,12 @@ export class FileDownloadComponent implements OnInit {
   });
 
   maxDate: Date;
+  dateFilter = (d: Date | null): boolean => {
+    if (!d) {
+      return false;
+    }
+    return isFirstOrLastDayOfMonth(d);
+  };
   isDownloading = false;
   downloadMessage = '';
   isErrorMessage = false;
