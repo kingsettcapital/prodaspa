@@ -27,15 +27,28 @@ import { ErrorInterceptor } from './core/interceptors/error.interceptor';
 import { AuthInterceptor } from './core/interceptors/auth.interceptor';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialogModule } from '@angular/material/dialog';
+import { MatTabsModule } from '@angular/material/tabs';
 
 
 export function MSALInstanceFactory(): IPublicClientApplication {
   return new PublicClientApplication(msalConfig);
 }
 export function MSALInterceptorConfigFactory(): MsalInterceptorConfiguration {
-  const protectedResourceMap = new Map<string,
-    Array<string>>();
-  protectedResourceMap.set(protectedResources.loginApi.endpoint, protectedResources.loginApi.scopes);
+  const protectedResourceMap = new Map<string, Array<string> | null>();
+  const apiBase = protectedResources.loginApi.endpoint.replace(/\/+$/, '');
+
+  // Option (A): null scopes = unprotected. Register before loginApi so Validation/* wins when hosts match.
+  protectedResourceMap.set(protectedResources.validationApi.pathWildcard, null);
+  if (protectedResources.validationApi.baseUrl !== apiBase) {
+    protectedResourceMap.set(protectedResources.validationApi.baseUrl, null);
+  }
+
+      // Property master list is API-key gated on the gateway, not Bearer.
+      // Register as unprotected (null) BEFORE loginApi so it wins over the
+      // apiUrl entry when validationApiUrl and apiUrl share a host.
+      protectedResourceMap.set(`${protectedResources.validationApi.baseUrl.replace(/\/+$/, '')}/Property`, null);
+      protectedResourceMap.set(protectedResources.loginApi.endpoint, protectedResources.loginApi.scopes);
+
   return {
     interactionType: InteractionType.Redirect,
     protectedResourceMap
@@ -73,7 +86,8 @@ export function MSALGuardConfigFactory(): MsalGuardConfiguration {
     MatDatepickerModule,
     MatNativeDateModule,
     MatSnackBarModule,
-    MatDialogModule
+    MatDialogModule,
+    MatTabsModule
   ],
   providers: [
     {

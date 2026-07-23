@@ -1,0 +1,328 @@
+// The component host sits between main.layout-content (a column flex
+// container with a definite height) and .properties-page. Without these
+// rules the host sizes to content and the fill-height chain below is inert.
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+// Tokens mirrored from the Validation page so Properties reads as part of the
+// same app shell. Do not diverge without updating both.
+$page-bg: #f9fafb;
+$card-border: #e5e7eb;
+$header-strip: #f9fafb;
+$text-primary: #111827;
+$text-secondary: #4b5563;
+$cell-text: #374151;
+$row-divider: #f3f4f6;
+$row-hover: #f5f7fa;
+
+.properties-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: $page-bg;
+  padding: 2rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.properties-page__inner {
+  max-width: 52rem;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.properties-header {
+  &__title {
+    margin: 0 0 0.5rem;
+    padding: 0;
+    font-size: 1.875rem;
+    font-weight: 600;
+    color: $text-primary;
+    line-height: 1.2;
+  }
+
+  &__subtitle {
+    margin: 0;
+    font-size: 1rem;
+    color: $text-secondary;
+    line-height: 1.5;
+  }
+}
+
+.table-card {
+  overflow: hidden;
+  border: 1px solid $card-border;
+  border-radius: 0.75rem;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+
+  &__scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  &__header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 1rem;
+    background: $header-strip;
+    border-bottom: 1px solid $card-border;
+  }
+
+  // Constrain the Add button so it stops setting the strip height.
+  &__header button.mat-flat-button {
+    height: 36px;
+    line-height: 36px;
+    padding: 0 1rem;
+  }
+
+  &__label {
+    flex: 0 0 auto;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: $text-secondary;
+  }
+
+  &__header button mat-icon {
+    margin-right: 4px;
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+.properties-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+// ID and Space Type are content-sized; Property Name absorbs the remainder.
+$actions-col-width: 6rem;
+$id-col-width: 9rem;
+$type-col-width: 7rem;
+
+.col-id   { width: $id-col-width; }
+.col-type { width: $type-col-width; }
+.col-name {
+  width: calc(100% - #{$id-col-width} - #{$type-col-width} - #{$actions-col-width});
+}
+
+.col-actions {
+  width: $actions-col-width;
+  text-align: right;
+  padding-left: 0.25rem;
+  padding-right: 0.5rem;
+}
+
+// Retained for the currently-unused index column (see template).
+.col-index {
+  width: 2.5rem;
+  text-align: center;
+  color: #8a929c;
+  font-variant-numeric: tabular-nums;
+}
+
+th.mat-header-cell,
+td.mat-cell {
+  padding: 0.375rem 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+td.mat-cell {
+  line-height: 1.25rem;
+  vertical-align: middle;
+}
+
+th.mat-header-cell {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: $text-secondary;
+  border-bottom: 1px solid $card-border;
+}
+
+td.mat-cell {
+  font-size: 0.875rem;
+  color: $cell-text;
+}
+
+tr.mat-row {
+  transition: background 0.12s ease;
+
+  td.mat-cell {
+    border-bottom: 1px solid $row-divider;
+  }
+
+  &:hover {
+    background: $row-hover;
+  }
+}
+
+// Kebab is quiet until the row is engaged. :focus-within keeps it reachable
+// by keyboard.
+// mat-icon-button is 40x40 by default, which forces a taller row.
+// Constraining to 32px keeps the row at its current height.
+.row-action.mat-icon-button {
+  width: 32px;
+  height: 32px;
+  line-height: 32px;
+  opacity: 0.55;
+  transition: opacity 0.12s ease, color 0.12s ease;
+  color: $text-secondary;
+
+  .mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+  }
+
+  &:hover,
+  &:focus-visible {
+    opacity: 1;
+  }
+}
+
+.row-action--remove:hover,
+.row-action--remove:focus-visible {
+  color: #b00020;
+}
+
+tr.mat-row:hover .row-action.mat-icon-button,
+tr.mat-row:focus-within .row-action.mat-icon-button {
+  opacity: 1;
+}
+
+.state-row {
+  padding: 1.5rem 0;
+  display: flex;
+  justify-content: center;
+  color: $text-secondary;
+}
+
+.state-row.error {
+  color: #b00020;
+}
+
+// Sticky header. Material sets position:sticky via `sticky: true` on the
+// header row def; the cells need an opaque background or scrolled rows
+// show through them.
+.properties-table th.mat-header-cell {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #fff;
+}
+
+// Paginator pins to the card footer and never scrolls with the rows.
+.properties-paginator {
+  flex: 0 0 auto;
+  border-top: 1px solid $card-border;
+  background: #fff;
+
+  ::ng-deep .mat-paginator-container {
+    min-height: 44px;
+    padding: 0 0.5rem;
+  }
+}
+
+// First search input in the app. Deliberately a bare input rather than
+// mat-form-field: legacy Material 14 outline fields are ~56px tall and
+// would set the header strip height. Sets the precedent for other pages.
+.table-search {
+  flex: 0 1 20rem;
+  margin-left: auto;
+  margin-right: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 36px;
+  padding: 0 0.5rem;
+  box-sizing: border-box;
+  background: #fff;
+  border: 1px solid $card-border;
+  border-radius: 0.375rem;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+
+  &:focus-within {
+    border-color: #0C274A;
+    box-shadow: 0 0 0 2px rgba(12, 39, 74, 0.12);
+  }
+
+  &__icon {
+    flex: 0 0 auto;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    color: #8a929c;
+  }
+
+  &__input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-family: inherit;
+    font-size: 0.875rem;
+    color: $cell-text;
+
+    &::placeholder {
+      color: #9aa1ab;
+    }
+
+    // Chrome renders a native clear affordance on type="search";
+    // we supply our own button.
+    &::-webkit-search-cancel-button {
+      -webkit-appearance: none;
+      appearance: none;
+    }
+  }
+
+  &__clear.mat-icon-button {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
+    color: $text-secondary;
+
+    .mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+      line-height: 16px;
+    }
+  }
+}
+
+// Sort headers must not clip their arrow against the nowrap/overflow rules
+// already set on th.mat-header-cell.
+.properties-table th.mat-header-cell .mat-sort-header-container {
+  overflow: visible;
+}

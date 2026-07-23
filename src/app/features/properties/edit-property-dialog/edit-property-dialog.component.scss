@@ -1,0 +1,28 @@
+.dialog-body {
+  min-width: 320px;
+  padding-top: 4px;
+}
+
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.feedback {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.feedback--error {
+  color: #b00020;
+}
+
+mat-dialog-actions {
+  gap: 8px;
+}

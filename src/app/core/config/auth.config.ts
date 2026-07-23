@@ -24,10 +24,21 @@ export const msalConfig: Configuration = {
   }
 }
 
+function trimTrailingSlashes(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
+const validationApiBase = trimTrailingSlashes(environment.validationApiUrl);
+
 export const protectedResources = {
   loginApi: {
     endpoint: environment.apiUrl,
     scopes: [environment.azureConfig.scopes]
+  },
+  /** MSAL v2: map value `null` = unprotected (interceptor passes through, no token). */
+  validationApi: {
+    baseUrl: validationApiBase,
+    pathWildcard: `${validationApiBase}/Validation/*`,
   }
 }
 

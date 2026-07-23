@@ -1,0 +1,488 @@
+<div class="validation-page">
+  <div class="validation-page__inner">
+    <header class="validation-header">
+      <h1 class="validation-header__title">Tenant Name Validation</h1>
+      <p class="validation-header__subtitle">
+        Upload a rent roll Excel file to validate tenant names against the system of record.
+      </p>
+    </header>
+
+    <div class="validation-layout">
+      <div class="validation-layout__main">
+    <section
+      class="upload-zone"
+      [class.upload-zone--dragging]="isDragging"
+      (click)="fileInput.click()"
+      (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave()"
+      (drop)="onDrop($event)"
+    >
+      <input
+        #fileInput
+        type="file"
+        accept=".xlsx"
+        multiple
+        class="upload-zone__input"
+        (change)="onFilesSelected($event)"
+      />
+
+      <div class="upload-zone__content" *ngIf="selectedFiles.length > 0; else uploadEmpty">
+        <p class="upload-zone__count">{{ selectedFiles.length }} files selected</p>
+        <ul class="upload-zone__file-list">
+          <li class="upload-zone__file-item" *ngFor="let file of selectedFiles">
+            <mat-icon class="upload-zone__file-icon">check_circle</mat-icon>
+            <span class="upload-zone__file-name">{{ file.name }}</span>
+          </li>
+        </ul>
+      </div>
+
+      <ng-template #uploadEmpty>
+        <div class="upload-zone__empty">
+          <mat-icon class="upload-zone__empty-icon">cloud_upload</mat-icon>
+          <p class="upload-zone__empty-title">Drag and drop your .xlsx file here</p>
+          <p class="upload-zone__empty-hint">or click to browse</p>
+        </div>
+      </ng-template>
+    </section>
+
+    <label class="asof-field">
+      As-of date
+      <input type="date" [(ngModel)]="asOfDate" name="asOfDate" />
+    </label>
+
+    <button
+      type="button"
+      class="validate-all-btn"
+      [disabled]="!canValidate"
+      (click)="validate()"
+    >
+      <mat-spinner *ngIf="isLoading" diameter="20"></mat-spinner>
+      <span>{{ isLoading ? 'Validating...' : 'Validate All Files' }}</span>
+    </button>
+
+    <div class="error-banner" *ngIf="errorMessage">
+      <mat-icon class="error-banner__icon">warning</mat-icon>
+      <span>{{ errorMessage }}</span>
+    </div>
+
+    <section class="file-results" *ngIf="batchResults.length > 0">
+      <p class="asof-note">Showing tenants in place as of {{ asOfDisplay }}.</p>
+      <div
+        class="file-card"
+        *ngFor="let result of batchResults; let fileIndex = index; trackBy: trackByFileName"
+      >
+        <div class="file-card__header" (click)="toggleFile(fileIndex)">
+          <div class="file-card__header-left">
+            <span class="file-card__chevron" aria-hidden="true">
+              {{ isFileExpanded(fileIndex) ? '▾' : '▸' }}
+            </span>
+            <span class="file-card__name">{{ result.fileName }}</span>
+          </div>
+          <div class="file-card__header-right">
+            <span class="file-card__corrections-badge" *ngIf="acceptedCount(fileIndex) > 0">
+              {{ acceptedCount(fileIndex) }} corrections ready
+            </span>
+          </div>
+        </div>
+
+        <div class="file-card__body" *ngIf="isFileExpanded(fileIndex)">
+          <div
+            class="field-group"
+            *ngFor="let fieldGroup of fieldGroupsFor(fileIndex)"
+          >
+            <div
+              class="field-group__header"
+              (click)="toggleFieldGroup(fileIndex, fieldGroup.type, $event)"
+            >
+              <span class="field-group__chevron" aria-hidden="true">
+                {{ isFieldGroupExpanded(fileIndex, fieldGroup.type) ? '▾' : '▸' }}
+              </span>
+              <span class="field-group__label">{{ fieldGroup.label }}</span>
+            </div>
+
+            <div class="field-group__body" *ngIf="isFieldGroupExpanded(fileIndex, fieldGroup.type)">
+              <div
+                class="parent-copy-prompt"
+                *ngIf="fieldGroup.type === 'parent' && isParentCopyPending(fileIndex)"
+              >
+                <p class="parent-copy-prompt__text">
+                  This file doesn't include Parent Names. Copy each tenant name
+                  into the Parent Name field and validate them?
+                </p>
+                <div class="parent-copy-prompt__actions">
+                  <button
+                    type="button"
+                    class="bucket-btn bulk-action--green"
+                    (click)="confirmParentCopy(fileIndex)"
+                  >
+                    Copy tenant names as parent names
+                  </button>
+                  <button
+                    type="button"
+                    class="bucket-btn"
+                    (click)="cancelParentCopy(fileIndex, $event)"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+              <ng-container
+                *ngIf="fieldGroup.type !== 'parent' || !isParentCopyPending(fileIndex)"
+              >
+                <div
+                  class="bucket"
+                  *ngFor="let bucket of displayBuckets"
+                >
+                  <div
+                    class="bucket__header"
+                    [ngClass]="bucket.headerClass"
+                    (click)="toggleSection(fileIndex, fieldGroup.type, bucket.key, $event)"
+                  >
+                    <div class="bucket__header-left">
+                      <span class="bucket__chevron" aria-hidden="true">
+                        {{ isSectionExpanded(fileIndex, fieldGroup.type, bucket.key) ? '▾' : '▸' }}
+                      </span>
+                      <span>
+                        {{ bucket.label }} ({{ bucketCount(fileIndex, fieldGroup.type, bucket.key) }})
+                      </span>
+                    </div>
+                    <div
+                      class="bucket__header-actions"
+                      *ngIf="bucket.key === 'suggested'"
+                      (click)="$event.stopPropagation()"
+                    >
+                      <button
+                        type="button"
+                        class="bucket-btn bulk-action--green"
+                        [disabled]="applyAllSuggestionsCount(fileIndex, fieldGroup.type) === 0"
+                        (click)="requestBulkAction('apply-all', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
+                      >
+                        Apply All Suggestions
+                      </button>
+                    </div>
+                    <div
+                      class="bucket__header-actions"
+                      *ngIf="bucket.key === 'new'"
+                      (click)="$event.stopPropagation()"
+                    >
+                      <button
+                        type="button"
+                        class="bucket-btn bulk-action--green"
+                        [disabled]="acceptAsIsEligibleCount(fileIndex, fieldGroup.type) === 0"
+                        (click)="requestBulkAction('accept-as-is', fileIndex, fieldGroup.type, fieldGroup.label, $event)"
+                      >
+                        Accept All As-Is
+                      </button>
+                    </div>
+                  </div>
+                  <div
+                    class="bucket__table-wrap"
+                    *ngIf="isSectionExpanded(fileIndex, fieldGroup.type, bucket.key)"
+                  >
+                    <app-validation-result-table
+                      [fieldType]="fieldGroup.type"
+                      [bucket]="bucket.key"
+                      [nameColumnLabel]="fieldGroup.nameColumnLabel"
+                      [rows]="rowsForDisplayBucket(fileIndex, fieldGroup.type, bucket.key)"
+                      [acceptedKeys]="tableAcceptedKeys(fileIndex, fieldGroup.type)"
+                      [correctionByKey]="tableCorrectionMap(fileIndex, fieldGroup.type)"
+                      (accept)="onTableAccept(fileIndex, fieldGroup.type, $event)"
+                      (overrideRequest)="onTableOverrideRequest(fileIndex, fieldGroup.type, $event)"
+                      (manual)="onTableManual(fileIndex, fieldGroup.type, $event)"
+                      (clear)="onTableClear(fileIndex, fieldGroup.type, $event)"
+                    ></app-validation-result-table>
+                  </div>
+                </div>
+              </ng-container>
+            </div>
+          </div>
+
+          <div class="file-download" (click)="$event.stopPropagation()">
+            <div class="file-download__actions">
+              <button
+                type="button"
+                class="file-save__btn"
+                [disabled]="!canSaveDraft(fileIndex)"
+                (click)="saveDraft(fileIndex)"
+              >
+                <mat-icon class="file-save__icon">save</mat-icon>
+                <span>{{ draftSaveStatus(fileIndex) === 'saving' ? 'Saving…' : 'Save Draft' }}</span>
+              </button>
+              <button
+                type="button"
+                class="file-download__btn"
+                [disabled]="isDownloadInProgress(fileIndex)"
+                (click)="downloadFile(fileIndex, $event)"
+              >
+                <mat-icon class="file-download__icon">download</mat-icon>
+                Download Corrected File
+              </button>
+              <button
+                type="button"
+                class="file-clear__btn"
+                (click)="clearBatch(fileInput)"
+              >
+                <mat-icon class="file-clear__icon">close</mat-icon>
+                Clear File
+              </button>
+            </div>
+
+            <p class="file-save__status file-save__status--saved" *ngIf="draftSaveStatus(fileIndex) === 'saved'">
+              ✓ Draft saved
+            </p>
+            <p class="file-save__status file-save__status--error" *ngIf="draftSaveStatus(fileIndex) === 'error'">
+              Draft save failed — please try again.
+            </p>
+
+            <div
+              class="download-checklist"
+              *ngIf="downloadProgress(fileIndex) as progress"
+            >
+              <ul class="download-checklist__list">
+                <li
+                  class="download-checklist__item"
+                  *ngFor="let label of downloadStepLabels; let i = index; trackBy: trackByStepLabel"
+                >
+                  <span class="download-checklist__icon" aria-hidden="true">
+                    <span
+                      *ngIf="progress.steps[i] === 'done'"
+                      class="download-checklist__mark download-checklist__mark--done"
+                    >✓</span>
+                    <mat-spinner
+                      *ngIf="progress.steps[i] === 'active'"
+                      class="download-checklist__spinner"
+                      diameter="16"
+                    ></mat-spinner>
+                    <span
+                      *ngIf="progress.steps[i] === 'failed'"
+                      class="download-checklist__mark download-checklist__mark--failed"
+                    >✗</span>
+                    <span
+                      *ngIf="progress.steps[i] === 'pending'"
+                      class="download-checklist__dot"
+                    ></span>
+                  </span>
+                  <span
+                    class="download-checklist__label"
+                    [class.download-checklist__label--active]="progress.steps[i] === 'active'"
+                    [class.download-checklist__label--done]="progress.steps[i] === 'done'"
+                    [class.download-checklist__label--failed]="progress.steps[i] === 'failed'"
+                    [class.download-checklist__label--pending]="progress.steps[i] === 'pending'"
+                  >
+                    {{ label }}
+                  </span>
+                </li>
+              </ul>
+              <p class="download-checklist__error" *ngIf="progress.errorMessage">
+                {{ progress.errorMessage }}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="history-panel">
+      <div class="history-panel__header">
+        <button
+          type="button"
+          class="history-panel__title-btn"
+          (click)="toggleHistory()"
+        >
+          <span class="history-panel__chevron" aria-hidden="true">
+            {{ showHistory ? '▾' : '▸' }}
+          </span>
+          <h2 class="history-panel__title">Upload History</h2>
+        </button>
+        <button
+          type="button"
+          class="history-panel__toggle-btn"
+          (click)="toggleHistory()"
+        >
+          {{ showHistory ? 'Hide' : 'Show' }}
+        </button>
+      </div>
+
+      <div class="history-panel__body" *ngIf="showHistory">
+        <p class="history-panel__loading" *ngIf="historyLoading">Loading history…</p>
+        <p class="history-panel__error" *ngIf="historyError">{{ historyError }}</p>
+
+        <p
+          class="history-panel__empty"
+          *ngIf="!historyLoading && !historyError && history.length === 0"
+        >
+          No uploads yet.
+        </p>
+
+        <div
+          class="history-panel__table-wrap"
+          *ngIf="!historyLoading && !historyError && history.length > 0"
+        >
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>File Name</th>
+                <th>Uploaded At</th>
+                <th>Total</th>
+                <th>Correct</th>
+                <th>Suggested</th>
+                <th>Flagged</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let h of history; trackBy: trackByHistoryId">
+                <td class="history-table__file">{{ h.fileName }}</td>
+                <td>{{ h.uploadedAt | date:'medium':'America/Toronto' }}</td>
+                <td>{{ h.total }}</td>
+                <td class="history-table__correct">✓ {{ h.excluded }}</td>
+                <td class="history-table__suggested">⚠ {{ h.suggested }}</td>
+                <td class="history-table__flagged">✗ {{ h.flagged }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+      </div>
+
+      <aside class="validation-layout__rail" *ngIf="hasInProgressDrafts">
+        <section class="resume-banner">
+          <div class="resume-banner__head">
+            <mat-icon class="resume-banner__icon">history</mat-icon>
+            <p class="resume-banner__title">Drafts in progress</p>
+          </div>
+          <div class="resume-banner__list">
+            <div
+              class="resume-draft"
+              *ngFor="let d of inProgressDrafts; trackBy: trackByDraftFileId"
+            >
+              <div class="resume-draft__header">
+                <div class="resume-draft__meta">
+                  <span class="resume-draft__name">{{ d.fileName }}</span>
+                  <span class="resume-draft__detail">
+                    Saved {{ d.savedAt | date:'medium':'America/Toronto' }}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  class="resume-draft__discard"
+                  (click)="discardDraft(d.fileId)"
+                  aria-label="Discard draft"
+                  title="Discard draft"
+                >
+                  <mat-icon class="resume-draft__discard-icon">delete_outline</mat-icon>
+                </button>
+              </div>
+              <button
+                type="button"
+                class="resume-draft__btn"
+                (click)="resumeDraft(d.fileId)"
+              >
+                Resume
+                <mat-icon class="resume-draft__btn-icon">arrow_forward</mat-icon>
+              </button>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <div class="override-popover-layer" *ngIf="pendingOverride as popover">
+    <button
+      type="button"
+      class="override-popover-layer__backdrop"
+      aria-label="Close override editor"
+      (click)="cancelOverride()"
+    ></button>
+    <div
+      class="override-popover-layer__panel"
+      [style.top.px]="popover.top"
+      [style.left.px]="popover.left"
+      (click)="$event.stopPropagation()"
+    >
+      <app-override-popover-panel
+        [originalName]="popover.originalName"
+        [initialValue]="popover.initialValue"
+        [placeholder]="popover.placeholder"
+        (save)="onOverrideSave($event)"
+        (cancel)="cancelOverride()"
+      ></app-override-popover-panel>
+    </div>
+  </div>
+
+  <div
+    class="confirm-overlay"
+    *ngIf="pendingBulkAction"
+    (click)="cancelBulkAction()"
+  >
+    <div
+      class="confirm-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="bulk-confirm-title"
+      (click)="$event.stopPropagation()"
+    >
+      <h2 id="bulk-confirm-title" class="confirm-dialog__title">
+        Are you sure you want to {{ bulkConfirmTitle }}?
+      </h2>
+      <p class="confirm-dialog__description">{{ bulkConfirmDescription }}</p>
+      <div class="confirm-dialog__actions">
+        <button
+          type="button"
+          class="confirm-dialog__btn confirm-dialog__btn--cancel"
+          (click)="cancelBulkAction()"
+        >
+          No
+        </button>
+        <button
+          type="button"
+          class="confirm-dialog__btn confirm-dialog__btn--confirm"
+          [ngClass]="bulkConfirmClass"
+          (click)="confirmBulkAction()"
+        >
+          Yes
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div
+    class="confirm-overlay"
+    *ngIf="pendingAmbiguousNotice"
+    (click)="dismissAmbiguousNotice()"
+  >
+    <div
+      class="confirm-dialog confirm-dialog--notice"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="ambiguous-notice-title"
+      (click)="$event.stopPropagation()"
+    >
+      <h2 id="ambiguous-notice-title" class="confirm-dialog__title">
+        Rows needing manual review
+      </h2>
+      <p class="confirm-dialog__description">
+        These names contain AND/OR and cannot be accepted as-is automatically.
+        Enter the correct name on each row.
+      </p>
+      <ul class="confirm-dialog__list">
+        <li *ngFor="let row of pendingAmbiguousNotice.rows">
+          <span class="confirm-dialog__list-meta">
+            {{ noticeUnit(row) }} · {{ noticeBuilding(row) }}
+          </span>
+          <span class="confirm-dialog__list-name">{{ row.tenantName }}</span>
+        </li>
+      </ul>
+      <div class="confirm-dialog__actions">
+        <button
+          type="button"
+          class="confirm-dialog__btn confirm-dialog__btn--confirm"
+          (click)="dismissAmbiguousNotice()"
+        >
+          Got it
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

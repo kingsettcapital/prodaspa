@@ -4,9 +4,13 @@ import { ReactiveFormsModule, FormsModule } from '@angular/forms';
 
 // Angular Material modules
 import { MatCardModule } from '@angular/material/card';
+import { MatTableModule } from '@angular/material/table';
+import { MatSortModule } from '@angular/material/sort';
+import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatSidenavModule } from '@angular/material/sidenav';
@@ -16,6 +20,7 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { OnlyNumbersDirective } from '../core/directives/only-numbers.directive';
 import { MatDialogModule } from '@angular/material/dialog';
+import { MatTabsModule } from '@angular/material/tabs';
 
 @NgModule({
   declarations: [
@@ -26,9 +31,13 @@ import { MatDialogModule } from '@angular/material/dialog';
     ReactiveFormsModule,
     FormsModule,
     MatCardModule,
+    MatTableModule,
+    MatSortModule,
+    MatPaginatorModule,
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     MatIconModule,
     MatToolbarModule,
     MatSidenavModule,
@@ -36,16 +45,21 @@ import { MatDialogModule } from '@angular/material/dialog';
     MatProgressSpinnerModule,
     MatDatepickerModule,
     MatNativeDateModule,
-    MatDialogModule
+    MatDialogModule,
+    MatTabsModule
   ],
   exports: [
     CommonModule,
     ReactiveFormsModule,
     FormsModule,
     MatCardModule,
+    MatTableModule,
+    MatSortModule,
+    MatPaginatorModule,
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     MatIconModule,
     MatToolbarModule,
     MatSidenavModule,
@@ -54,7 +68,8 @@ import { MatDialogModule } from '@angular/material/dialog';
     MatDatepickerModule,
     MatNativeDateModule,
     OnlyNumbersDirective,
-    MatDialogModule
+    MatDialogModule,
+    MatTabsModule
   ]
 })
 export class SharedModule {}

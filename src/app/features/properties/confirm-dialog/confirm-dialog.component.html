@@ -1,0 +1,24 @@
+<h2 mat-dialog-title>{{ data.title }}</h2>
+
+<div mat-dialog-content class="dialog-body">
+  <p class="dialog-message">{{ data.message }}</p>
+</div>
+
+<div mat-dialog-actions align="end">
+  <ng-container *ngIf="isAcknowledgement; else confirmActions">
+    <button mat-flat-button color="primary" type="button" (click)="cancel()">
+      Got it
+    </button>
+  </ng-container>
+
+  <ng-template #confirmActions>
+    <button mat-button type="button" (click)="cancel()">
+      {{ data.cancelLabel || 'Cancel' }}
+    </button>
+    <button mat-flat-button type="button"
+            [color]="isDanger ? 'warn' : 'primary'"
+            (click)="confirm()">
+      {{ data.confirmLabel }}
+    </button>
+  </ng-template>
+</div>
