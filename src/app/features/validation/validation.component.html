@@ -66,7 +66,6 @@
     </div>
 
     <section class="file-results" *ngIf="batchResults.length > 0">
-      <p class="asof-note">Showing tenants in place as of {{ asOfDisplay }}.</p>
       <div
         class="file-card"
         *ngFor="let result of batchResults; let fileIndex = index; trackBy: trackByFileName"
@@ -78,6 +77,28 @@
             </span>
             <span class="file-card__name">{{ result.fileName }}</span>
           </div>
+          <div class="file-card__header-center">
+            <mat-button-toggle-group
+              *ngIf="isFileExpanded(fileIndex) && hasParentResponse(fileIndex)"
+              class="field-toggle"
+              [value]="activeFieldType(fileIndex)"
+              (change)="onFieldToggleChange(fileIndex, $event)"
+              (click)="$event.stopPropagation()"
+            >
+              <mat-button-toggle
+                value="tenant"
+                (click)="$event.stopPropagation()"
+              >
+                Tenant names ({{ fieldGroupRowCount(fileIndex, 'tenant') }})
+              </mat-button-toggle>
+              <mat-button-toggle
+                value="parent"
+                (click)="$event.stopPropagation()"
+              >
+                Parent names ({{ fieldGroupRowCount(fileIndex, 'parent') }})
+              </mat-button-toggle>
+            </mat-button-toggle-group>
+          </div>
           <div class="file-card__header-right">
             <span class="file-card__corrections-badge" *ngIf="acceptedCount(fileIndex) > 0">
               {{ acceptedCount(fileIndex) }} corrections ready
@@ -86,21 +107,12 @@
         </div>
 
         <div class="file-card__body" *ngIf="isFileExpanded(fileIndex)">
-          <div
-            class="field-group"
-            *ngFor="let fieldGroup of fieldGroupsFor(fileIndex)"
-          >
-            <div
-              class="field-group__header"
-              (click)="toggleFieldGroup(fileIndex, fieldGroup.type, $event)"
-            >
-              <span class="field-group__chevron" aria-hidden="true">
-                {{ isFieldGroupExpanded(fileIndex, fieldGroup.type) ? '▾' : '▸' }}
-              </span>
-              <span class="field-group__label">{{ fieldGroup.label }}</span>
-            </div>
+          <div class="file-card__scroll">
+          <ng-container
+            *ngTemplateOutlet="fieldBucketsTpl; context: { fileIndex: fileIndex, fieldGroup: fieldGroupConfig(activeFieldType(fileIndex)) }"
+          ></ng-container>
 
-            <div class="field-group__body" *ngIf="isFieldGroupExpanded(fileIndex, fieldGroup.type)">
+          <ng-template #fieldBucketsTpl let-fileIndex="fileIndex" let-fieldGroup="fieldGroup">
               <div
                 class="parent-copy-prompt"
                 *ngIf="fieldGroup.type === 'parent' && isParentCopyPending(fileIndex)"
@@ -183,7 +195,7 @@
                       [fieldType]="fieldGroup.type"
                       [bucket]="bucket.key"
                       [nameColumnLabel]="fieldGroup.nameColumnLabel"
-                      [rows]="rowsForDisplayBucket(fileIndex, fieldGroup.type, bucket.key)"
+                      [rows]="rowsForPagedDisplayBucket(fileIndex, fieldGroup.type, bucket.key)"
                       [acceptedKeys]="tableAcceptedKeys(fileIndex, fieldGroup.type)"
                       [correctionByKey]="tableCorrectionMap(fileIndex, fieldGroup.type)"
                       (accept)="onTableAccept(fileIndex, fieldGroup.type, $event)"
@@ -191,10 +203,21 @@
                       (manual)="onTableManual(fileIndex, fieldGroup.type, $event)"
                       (clear)="onTableClear(fileIndex, fieldGroup.type, $event)"
                     ></app-validation-result-table>
+                    <mat-paginator
+                      *ngIf="shouldShowPaginator(fileIndex, fieldGroup.type, bucket.key)"
+                      class="bucket-paginator"
+                      [length]="bucketCount(fileIndex, fieldGroup.type, bucket.key)"
+                      [pageIndex]="pageIndexFor(fileIndex, fieldGroup.type, bucket.key)"
+                      [pageSize]="pageSizeFor(fileIndex, fieldGroup.type, bucket.key)"
+                      [pageSizeOptions]="pageSizeOptions"
+                      [showFirstLastButtons]="true"
+                      (page)="onBucketPage(fileIndex, fieldGroup.type, bucket.key, $event)"
+                      aria-label="Select page of validation results"
+                    ></mat-paginator>
                   </div>
                 </div>
               </ng-container>
-            </div>
+          </ng-template>
           </div>
 
           <div class="file-download" (click)="$event.stopPropagation()">

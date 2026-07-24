@@ -1,4 +1,6 @@
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { MatButtonToggleChange } from '@angular/material/button-toggle';
+import { PageEvent } from '@angular/material/paginator';
 import { Subscription } from 'rxjs';
 import { ValidationApiService } from './services/validation-api.service';
 import { NotificationService } from 'src/app/core/services/notification.service';
@@ -130,11 +132,18 @@ export class ValidationComponent implements OnInit, OnDestroy {
   expandedFiles = new Set<number>();
   expandedFieldGroups = new Set<string>();
   expandedSections = new Set<string>();
+  /** Active Tenant/Parent tab per file card. Not persisted to drafts. */
+  activeFieldTabByFile = new Map<number, FieldType>();
+  /** Page index/size per (fileIndex, fieldType, bucketKey). Not persisted to drafts. */
+  bucketPageState = new Map<string, { pageIndex: number; pageSize: number }>();
   corrections = new Map<string, StoredCorrectionRecord>();
   downloadProgressByFile = new Map<number, DownloadChecklistState>();
   private draftSaveState = new Map();
 
   private autoAlignApplied = false;
+
+  readonly defaultPageSize = 50;
+  readonly pageSizeOptions = [25, 50, 100];
 
   /** FIX 3: bump when corrections mutate so table inputs reuse stable Map/Set refs. */
   private correctionsVersion = 0;
@@ -178,19 +187,6 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   get canValidate(): boolean {
     return this.selectedFiles.length > 0 && !this.isLoading;
-  }
-
-  get asOfDisplay(): string {
-    if (!this.asOfDate) {
-      return '';
-    }
-    const [y, m, d] = this.asOfDate.split('-').map(Number);
-    const dt = new Date(y, m - 1, d);
-    return dt.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
   }
 
   private todayLocalIso(): string {
@@ -247,6 +243,8 @@ export class ValidationComponent implements OnInit, OnDestroy {
     this.expandedFieldGroups = new Set<string>();
     this.parentCopyConfirmed.clear();
     this.expandedSections = new Set<string>();
+    this.activeFieldTabByFile = new Map<number, FieldType>();
+    this.bucketPageState = new Map<string, { pageIndex: number; pageSize: number }>();
     this.corrections = new Map<string, StoredCorrectionRecord>();
     this.downloadProgressByFile = new Map<number, DownloadChecklistState>();
     this.draftSaveState.clear();
@@ -358,7 +356,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   cancelParentCopy(fileIndex: number, event?: Event): void {
     event?.stopPropagation();
-    this.toggleFieldGroup(fileIndex, 'parent');
+    this.setActiveFieldTab(fileIndex, 'tenant');
   }
 
   fieldGroupsFor(fileIndex: number): FieldGroupConfig[] {
@@ -369,6 +367,104 @@ export class ValidationComponent implements OnInit, OnDestroy {
       groups.push({ type: 'parent', label: 'Parent names', nameColumnLabel: 'Parent Name' });
     }
     return groups;
+  }
+
+  fieldGroupConfig(fieldType: FieldType): FieldGroupConfig {
+    return fieldType === 'parent'
+      ? { type: 'parent', label: 'Parent names', nameColumnLabel: 'Parent Name' }
+      : { type: 'tenant', label: 'Tenant names', nameColumnLabel: 'Tenant Name' };
+  }
+
+  activeFieldType(fileIndex: number): FieldType {
+    const tab = this.activeFieldTabByFile.get(fileIndex) ?? 'tenant';
+    return tab === 'parent' && this.hasParentResponse(fileIndex) ? 'parent' : 'tenant';
+  }
+
+  onFieldToggleChange(fileIndex: number, event: MatButtonToggleChange): void {
+    const type = event.value === 'parent' ? 'parent' : 'tenant';
+    this.setActiveFieldTab(fileIndex, type);
+  }
+
+  private setActiveFieldTab(fileIndex: number, fieldType: FieldType): void {
+    const map = new Map(this.activeFieldTabByFile);
+    map.set(fileIndex, fieldType);
+    this.activeFieldTabByFile = map;
+  }
+
+  fieldGroupRowCount(fileIndex: number, fieldType: FieldType): number {
+    return this.displayBuckets.reduce(
+      (sum, bucket) => sum + this.bucketCount(fileIndex, fieldType, bucket.key),
+      0
+    );
+  }
+
+  private pageStateKey(fileIndex: number, fieldType: FieldType, bucket: BucketKey): string {
+    return `${fileIndex}|${fieldType}|${bucket}`;
+  }
+
+  pageIndexFor(fileIndex: number, fieldType: FieldType, bucket: BucketKey): number {
+    return this.bucketPageState.get(this.pageStateKey(fileIndex, fieldType, bucket))?.pageIndex ?? 0;
+  }
+
+  pageSizeFor(fileIndex: number, fieldType: FieldType, bucket: BucketKey): number {
+    return this.bucketPageState.get(this.pageStateKey(fileIndex, fieldType, bucket))?.pageSize
+      ?? this.defaultPageSize;
+  }
+
+  shouldShowPaginator(fileIndex: number, fieldType: FieldType, bucket: BucketKey): boolean {
+    return this.bucketCount(fileIndex, fieldType, bucket) > this.pageSizeFor(fileIndex, fieldType, bucket);
+  }
+
+  onBucketPage(
+    fileIndex: number,
+    fieldType: FieldType,
+    bucket: BucketKey,
+    event: PageEvent
+  ): void {
+    this.invalidatePagedSliceCache(fileIndex, fieldType, bucket);
+    const map = new Map(this.bucketPageState);
+    map.set(this.pageStateKey(fileIndex, fieldType, bucket), {
+      pageIndex: event.pageIndex,
+      pageSize: event.pageSize
+    });
+    this.bucketPageState = map;
+  }
+
+  /**
+   * View-only page slice for the table binding. Full-bucket consumers must keep
+   * calling rowsForDisplayBucket — never this method.
+   */
+  rowsForPagedDisplayBucket(
+    fileIndex: number,
+    fieldType: FieldType,
+    key: BucketKey
+  ): ValidationRow[] {
+    const pageIndex = this.pageIndexFor(fileIndex, fieldType, key);
+    const pageSize = this.pageSizeFor(fileIndex, fieldType, key);
+    const cacheKey = `paged|${fileIndex}|${fieldType}|${key}|${pageIndex}|${pageSize}`;
+    const cached = this.rowsForBucketCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const all = this.rowsForDisplayBucket(fileIndex, fieldType, key);
+    const start = pageIndex * pageSize;
+    const rows = all.slice(start, start + pageSize);
+    this.rowsForBucketCache.set(cacheKey, rows);
+    return rows;
+  }
+
+  private invalidatePagedSliceCache(
+    fileIndex: number,
+    fieldType: FieldType,
+    bucket: BucketKey
+  ): void {
+    const prefix = `paged|${fileIndex}|${fieldType}|${bucket}|`;
+    for (const key of Array.from(this.rowsForBucketCache.keys())) {
+      if (key.startsWith(prefix)) {
+        this.rowsForBucketCache.delete(key);
+      }
+    }
   }
 
   rowsForBucket(fileIndex: number, fieldType: FieldType, bucket: BucketKey): ValidationRow[] {
@@ -1212,6 +1308,8 @@ export class ValidationComponent implements OnInit, OnDestroy {
         this.clearRowsForBucketCache();
         this.autoAlignApplied = true;
         this.expandedFiles = new Set<number>([0]);
+        this.activeFieldTabByFile = new Map<number, FieldType>([[0, 'tenant']]);
+        this.bucketPageState = new Map<string, { pageIndex: number; pageSize: number }>();
 
         if (skipped.length > 0) {
           console.warn(
