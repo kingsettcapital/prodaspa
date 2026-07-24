@@ -1,68 +1,51 @@
+# Node.js with Angular
+# Build a Node.js project that uses Angular.
+
 trigger:
-  branches:
-    include:
-      - main
-      - staging
-      - develop
+- develop
+- staging
+- main
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: ubuntu-latest
 
-variables:
-  nodeVersion: '20.x'
+steps:
 
-stages:
-  - stage: Build
-    displayName: 'Build Stage'
-    jobs:
-      - job: BuildJob
-        displayName: 'Build Angular App'
-        steps:
-          - checkout: self
-            persistCredentials: true
+- checkout: self
+  persistCredentials: true
 
-          - task: NodeTool@0
-            inputs:
-              versionSpec: $(nodeVersion)
-            displayName: 'Install Node.js $(nodeVersion)'
+- task: NodeTool@0
+  inputs:
+    versionSpec: '20.x'
+  displayName: 'Install Node.js 20.x'
 
-          - script: |
-              npm install -g @angular/cli@20.x
-              npm install
-            displayName: 'Install Dependencies'
+- script: |
+    npm install -g @angular/cli@20.x
+    npm install
+  displayName: 'Install Dependencies'
 
-          # Build for Production (main branch)
-          - script: |
-              ng build -c production
-            displayName: 'Build Production'
-            condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
+# Build for Production (main branch)
+- script: |
+    ng build -c production
+  displayName: 'Build Production'
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
 
-          # Build for Staging/UAT (staging branch)
-          - script: |
-              ng build -c uat
-            displayName: 'Build Staging'
-            condition: eq(variables['Build.SourceBranch'], 'refs/heads/staging')
+# Build for Staging (staging branch)
+- script: |
+    ng build -c uat
+  displayName: 'Build Staging'
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/staging')
 
-          # Build for Development (develop branch)
-          - script: |
-              ng build -c dev
-            displayName: 'Build Development'
-            condition: eq(variables['Build.SourceBranch'], 'refs/heads/develop')
+# Build for Development (develop branch or other)
+- script: |
+    ng build -c dev
+  displayName: 'Build Development'
+  condition: and(succeeded(), ne(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.SourceBranch'], 'refs/heads/staging'))
 
-          # Default/Fallback build for pull requests or other branches
-          - script: |
-              ng build -c dev
-            displayName: 'Build Fallback (Dev)'
-            condition: and(
-              ne(variables['Build.SourceBranch'], 'refs/heads/main'),
-              ne(variables['Build.SourceBranch'], 'refs/heads/staging'),
-              ne(variables['Build.SourceBranch'], 'refs/heads/develop')
-            )
-
-          # Publish Artifacts
-          - task: PublishBuildArtifacts@1
-            displayName: 'Publish Build Artifacts'
-            inputs:
-              PathtoPublish: 'dist'
-              ArtifactName: 'drop'
-              publishLocation: 'Container'
+# Publish the built 'dist' directory as the pipeline artifact
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Build Artifact: drop'
+  inputs:
+    PathtoPublish: 'dist'
+    ArtifactName: 'drop'
+    publishLocation: 'Container'
