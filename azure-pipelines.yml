@@ -25,8 +25,22 @@ steps:
 - script: |
     npm install -g @angular/cli@20.x
     npm install
-    ng build -c production
   displayName: 'npm install and build'
+
+- script: |
+    ng build -c production
+  displayName: 'Angular Build (production)'
+  condition: eq(variables['Build.SourceBranchName'], 'main')
+
+- script: |
+    ng build -c staging
+  displayName: 'Angular Build (staging)'
+  condition: eq(variables['Build.SourceBranchName'], 'staging')
+
+- script: |
+    ng build -c dev
+  displayName: 'Angular Build (development)'
+  condition: eq(variables['Build.SourceBranchName'], 'develop')
   
 - task: ArchiveFiles@2
   inputs:
