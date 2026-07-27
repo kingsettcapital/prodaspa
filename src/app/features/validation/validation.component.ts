@@ -14,7 +14,8 @@ import {
   ParentAppliesToItem,
   ParentValidationResult,
   ValidationHistory,
-  ValidationResult
+  ValidationResult,
+  isIdentityBackfillRow
 } from './models/validation.models';
 import {
   BucketKey,
@@ -35,6 +36,7 @@ interface PendingOverride {
 }
 
 export interface StoredCorrectionRecord {
+  rowIndex: number;
   fieldType: 'Tenant' | 'Parent';
   originalName: string;
   correctedName: string;
@@ -725,7 +727,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   private tableRowKey(fieldType: FieldType, row: ValidationRow): string {
-    return row.tenantName;
+    return String(row.rowIndex);
   }
 
   acceptAsIsEligibleCount(fileIndex: number, fieldType: FieldType): number {
@@ -733,6 +735,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return this.rowsForDisplayBucket(fileIndex, fieldType, 'new')
       .filter(row =>
         !row.isAmbiguousMultiParty
+        && !isIdentityBackfillRow(row)
         && !acceptedKeys.has(this.tableRowKey(fieldType, row)))
       .length;
   }
@@ -744,6 +747,12 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   dismissAmbiguousNotice(): void {
     this.pendingAmbiguousNotice = null;
+  }
+
+  noticeReason(row: ValidationRow): string {
+    return row.isAmbiguousMultiParty
+      ? 'Ambiguous name'
+      : 'Parent filled from tenant name';
   }
 
   noticeUnit(row: ValidationRow): string {
@@ -850,15 +859,18 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   private executeAcceptAllAsIs(fileIndex: number, fieldType: FieldType): void {
     for (const row of this.rowsForDisplayBucket(fileIndex, fieldType, 'new')) {
-      if (row.isAmbiguousMultiParty) {
+      if (row.isAmbiguousMultiParty || isIdentityBackfillRow(row)) {
         continue;
       }
       this.acceptRow(fileIndex, fieldType, row);
     }
 
     const ambiguous = this.ambiguousNewRows(fileIndex, fieldType);
-    if (ambiguous.length > 0) {
-      this.pendingAmbiguousNotice = { fileIndex, fieldType, rows: ambiguous };
+    const identityBackfill = this.rowsForDisplayBucket(fileIndex, fieldType, 'new')
+      .filter(row => !row.isAmbiguousMultiParty && isIdentityBackfillRow(row));
+    const blocked = [...ambiguous, ...identityBackfill];
+    if (blocked.length > 0) {
+      this.pendingAmbiguousNotice = { fileIndex, fieldType, rows: blocked };
     }
   }
 
@@ -908,7 +920,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   private correctionKey(fileIndex: number, fieldType: FieldType, row: ValidationRow): string {
     const scope = fieldType === 'tenant' ? 'tenant' : 'parent';
-    return `${fileIndex}|${scope}|${row.tenantName}`;
+    return `${fileIndex}|${scope}|${row.rowIndex}`;
   }
 
   private setCorrection(
@@ -923,8 +935,9 @@ export class ValidationComponent implements OnInit, OnDestroy {
     }
   ): void {
     const map = new Map(this.corrections);
-    const record: StoredCorrectionRecord = {
-      fieldType: fieldType === 'tenant' ? 'Tenant' : 'Parent',
+  const record: StoredCorrectionRecord = {
+    rowIndex: row.rowIndex,
+    fieldType: fieldType === 'tenant' ? 'Tenant' : 'Parent',
       originalName: row.tenantName,
       correctedName: update.correctedName,
       changeType: update.changeType,
@@ -1089,6 +1102,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     const tenantCorrections = this.correctionsForFile(fileIndex)
       .filter(c => c.fieldType === 'Tenant')
       .flatMap(c => this.correctionTargets(c).map(target => ({
+        rowIndex: c.rowIndex,
         unitId: target.unit,
         building: target.building,
         originalName: c.originalName,
@@ -1100,6 +1114,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     const parentCorrections = this.correctionsForFile(fileIndex)
       .filter(c => c.fieldType === 'Parent')
       .map(c => ({
+        rowIndex: c.rowIndex,
         originalName: c.originalName,
         correctedName: c.correctedName,
         changeType: c.changeType,
@@ -1276,8 +1291,8 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
         const skipped: string[] = [];
         for (const d of decisions.tenantCorrections) {
-          const row = this.batchResults[0].response.results
-            .find(r => r.tenantName === d.originalName);
+        const row = this.batchResults[0].response.results
+          .find(r => r.rowIndex === d.rowIndex);
           if (!row) {
             skipped.push(`tenant:${d.originalName}`);
             continue;
@@ -1291,8 +1306,8 @@ export class ValidationComponent implements OnInit, OnDestroy {
         }
 
         for (const d of decisions.parentCorrections) {
-          const row = this.batchResults[0].parentResponse?.results
-            .find(r => r.tenantName === d.originalName);
+        const row = this.batchResults[0].parentResponse?.results
+          .find(r => r.rowIndex === d.rowIndex);
           if (!row) {
             skipped.push(`parent:${d.originalName}`);
             continue;

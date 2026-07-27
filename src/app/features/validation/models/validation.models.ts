@@ -4,6 +4,7 @@ export type MatchSource = 'MasterList' | 'Normalisation' | 'AcceptedAsIs' | 'Aut
 export type CorrectionChangeType = 'AcceptedSuggestion' | 'ManualOverride' | 'AcceptedAsIs';
 
 export interface ValidationResult {
+  rowIndex: number;
   propertyId: string;
   unitId: string;
   tenantName: string;
@@ -36,6 +37,7 @@ export interface ParentAppliesToItem {
 }
 
 export interface ParentValidationResult {
+  rowIndex: number;
   propertyId: string;
   unitId: string;
   tenantName: string;
@@ -50,7 +52,36 @@ export interface ParentValidationResult {
   confidence: number | null;
   reason: string;
   isAmbiguousMultiParty?: boolean;
+  isBackfilledFromTenant?: boolean;
   appliesTo: ParentAppliesToItem[];
+}
+
+/**
+ * True when accepting this row as-is would write an identity mapping
+ * (CorrectedName === OriginalName) into ParentTenantMappingTbl from a
+ * backfilled parent name — i.e. a name the source file never asserted as a
+ * parent. Such a write would be served by Branch 2 at confidence 100 on every
+ * later upload and permanently preempt fuzzy matching for that name.
+ *
+ * Deliberately narrow: a backfilled row carrying a real parent-master
+ * suggestion is NOT suppressed and learns normally. Backend enforces the same
+ * rule independently in DownloadCorrected; this is the UX half.
+ *
+ * Shared by validation.component.ts (bulk) and
+ * validation-result-table.component.ts (per-row tick) — do not inline a copy.
+ */
+export function isIdentityBackfillRow(row: {
+  isBackfilledFromTenant?: boolean;
+  suggestion?: string | null;
+  tenantName?: string;
+}): boolean {
+  if (!row.isBackfilledFromTenant) {
+    return false;
+  }
+  const suggestion = (row.suggestion ?? '').trim();
+  const name = (row.tenantName ?? '').trim();
+  return suggestion.length === 0
+    || suggestion.toLowerCase() === name.toLowerCase();
 }
 
 export interface ParentValidationResponse {
@@ -83,6 +114,7 @@ export interface ValidationHistory {
 }
 
 export interface CorrectionItem {
+  rowIndex: number;
   unitId: string;
   building: string;
   originalName: string;
@@ -93,6 +125,7 @@ export interface CorrectionItem {
 }
 
 export interface ParentCorrectionItem {
+  rowIndex: number;
   originalName: string;
   correctedName: string;
   changeType: CorrectionChangeType;

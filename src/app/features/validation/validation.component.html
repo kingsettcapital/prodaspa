@@ -486,13 +486,13 @@
         Rows needing manual review
       </h2>
       <p class="confirm-dialog__description">
-        These names contain AND/OR and cannot be accepted as-is automatically.
+        These rows cannot be accepted as-is automatically.
         Enter the correct name on each row.
       </p>
       <ul class="confirm-dialog__list">
         <li *ngFor="let row of pendingAmbiguousNotice.rows">
           <span class="confirm-dialog__list-meta">
-            {{ noticeUnit(row) }} · {{ noticeBuilding(row) }}
+            {{ noticeUnit(row) }} · {{ noticeBuilding(row) }} · {{ noticeReason(row) }}
           </span>
           <span class="confirm-dialog__list-name">{{ row.tenantName }}</span>
         </li>
