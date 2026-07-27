@@ -1,5 +1,8 @@
 # Node.js with Angular
 # Build a Node.js project that uses Angular.
+# Add steps that analyze code, save build artifacts, deploy, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/javascript
+# ng build -c uat
 
 trigger:
 - develop
@@ -13,7 +16,7 @@ steps:
 
 - checkout: self
   persistCredentials: true
-
+  
 - task: NodeTool@0
   inputs:
     versionSpec: '20.x'
@@ -22,30 +25,26 @@ steps:
 - script: |
     npm install -g @angular/cli@20.x
     npm install
-  displayName: 'Install Dependencies'
-
-# main => production
-- script: |
-    npm run build -- --configuration=production
-  displayName: 'Build Production'
-  condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
-
-# staging => uat
-- script: |
-    npm run build -- --configuration=uat
-  displayName: 'Build Staging/UAT'
-  condition: eq(variables['Build.SourceBranch'], 'refs/heads/staging')
-
-# develop => dev
-- script: |
-    npm run build
-  displayName: 'Build Development'
-  condition: eq(variables['Build.SourceBranch'], 'refs/heads/develop')
-
-# Publish the built 'dist' directory as the pipeline artifact
-- task: PublishBuildArtifacts@1
-  displayName: 'Publish Build Artifact: drop'
+    ng build -c production
+  displayName: 'npm install and build'
+  
+- task: ArchiveFiles@2
   inputs:
-    PathtoPublish: 'dist'
-    ArtifactName: 'drop'
-    publishLocation: 'Container'
+    rootFolderOrFile: '$(Build.BinariesDirectory)'
+    includeRootFolder: true
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+    replaceExistingArchive: true
+    
+- task: CopyPublishBuildArtifacts@1  
+  displayName: 'Copy Publish Artifact: drop'  
+  inputs:  
+    CopyRoot: dist  
+    Contents: '**'  
+    ArtifactName: drop  
+    ArtifactType: Container  
+  
+- task: DownloadPipelineArtifact@2  
+  displayName: 'Download Pipeline Artifact'  
+  inputs:  
+    targetPath: '$(Build.ArtifactStagingDirectory)/dist/AngularTest'
