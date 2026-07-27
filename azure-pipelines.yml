@@ -24,23 +24,23 @@ steps:
     npm install
   displayName: 'Install Dependencies'
 
-# Build for Production (main branch)
+# main => production
 - script: |
-    ng build -c production
+    npm run build -- --configuration=production
   displayName: 'Build Production'
   condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
 
-# Build for Staging (staging branch)
+# staging => uat
 - script: |
-    ng build -c uat
-  displayName: 'Build Staging'
+    npm run build -- --configuration=uat
+  displayName: 'Build Staging/UAT'
   condition: eq(variables['Build.SourceBranch'], 'refs/heads/staging')
 
-# Build for Development (develop branch or other)
+# develop => dev
 - script: |
-    ng build -c dev
+    npm run build
   displayName: 'Build Development'
-  condition: and(succeeded(), ne(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.SourceBranch'], 'refs/heads/staging'))
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/develop')
 
 # Publish the built 'dist' directory as the pipeline artifact
 - task: PublishBuildArtifacts@1
