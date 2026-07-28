@@ -363,18 +363,18 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   fieldGroupsFor(fileIndex: number): FieldGroupConfig[] {
     const groups: FieldGroupConfig[] = [
-      { type: 'tenant', label: 'Tenant names', nameColumnLabel: 'Tenant Name' }
+      { type: 'tenant', label: 'Tenant names', nameColumnLabel: 'Source Tenant Name' }
     ];
     if (this.hasParentResponse(fileIndex)) {
-      groups.push({ type: 'parent', label: 'Parent names', nameColumnLabel: 'Parent Name' });
+      groups.push({ type: 'parent', label: 'Parent names', nameColumnLabel: 'Source Parent Name' });
     }
     return groups;
   }
 
   fieldGroupConfig(fieldType: FieldType): FieldGroupConfig {
     return fieldType === 'parent'
-      ? { type: 'parent', label: 'Parent names', nameColumnLabel: 'Parent Name' }
-      : { type: 'tenant', label: 'Tenant names', nameColumnLabel: 'Tenant Name' };
+      ? { type: 'parent', label: 'Parent names', nameColumnLabel: 'Source Parent Name' }
+      : { type: 'tenant', label: 'Tenant names', nameColumnLabel: 'Source Tenant Name' };
   }
 
   activeFieldType(fileIndex: number): FieldType {

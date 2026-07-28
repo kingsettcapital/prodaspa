@@ -10,9 +10,8 @@
     <div class="validation-layout">
       <div class="validation-layout__main">
     <section
-      class="upload-zone"
-      [class.upload-zone--dragging]="isDragging"
-      (click)="fileInput.click()"
+      class="upload-bar"
+      [class.upload-bar--dragging]="isDragging"
       (dragover)="onDragOver($event)"
       (dragleave)="onDragLeave()"
       (drop)="onDrop($event)"
@@ -22,27 +21,38 @@
         type="file"
         accept=".xlsx"
         multiple
-        class="upload-zone__input"
+        class="upload-bar__input"
         (change)="onFilesSelected($event)"
       />
 
-      <div class="upload-zone__content" *ngIf="selectedFiles.length > 0; else uploadEmpty">
-        <p class="upload-zone__count">{{ selectedFiles.length }} files selected</p>
-        <ul class="upload-zone__file-list">
-          <li class="upload-zone__file-item" *ngFor="let file of selectedFiles">
-            <mat-icon class="upload-zone__file-icon">check_circle</mat-icon>
-            <span class="upload-zone__file-name">{{ file.name }}</span>
-          </li>
-        </ul>
-      </div>
+      <div class="upload-bar__row">
+        <mat-icon class="upload-bar__icon" aria-hidden="true">upload_file</mat-icon>
 
-      <ng-template #uploadEmpty>
-        <div class="upload-zone__empty">
-          <mat-icon class="upload-zone__empty-icon">cloud_upload</mat-icon>
-          <p class="upload-zone__empty-title">Drag and drop your .xlsx file here</p>
-          <p class="upload-zone__empty-hint">or click to browse</p>
+        <div class="upload-bar__body" *ngIf="selectedFiles.length > 0; else uploadEmpty">
+          <p class="upload-bar__title">{{ selectedFiles.length }} file{{ selectedFiles.length === 1 ? '' : 's' }} selected</p>
+          <ul class="upload-bar__file-list">
+            <li class="upload-bar__file-item" *ngFor="let file of selectedFiles">
+              <mat-icon class="upload-bar__file-check">check_circle</mat-icon>
+              <span class="upload-bar__file-name">{{ file.name }}</span>
+            </li>
+          </ul>
         </div>
-      </ng-template>
+
+        <ng-template #uploadEmpty>
+          <div class="upload-bar__body">
+            <p class="upload-bar__title">Upload rent roll</p>
+            <p class="upload-bar__hint">Excel (.xlsx) · drag and drop or use the button</p>
+          </div>
+        </ng-template>
+
+        <button
+          type="button"
+          class="upload-bar__btn"
+          (click)="fileInput.click()"
+        >
+          Add new files
+        </button>
+      </div>
     </section>
 
     <label class="asof-field">

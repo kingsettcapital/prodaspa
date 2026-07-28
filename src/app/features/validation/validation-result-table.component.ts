@@ -47,6 +47,12 @@ export class ValidationResultTableComponent {
   }
 
   get secondColumnHeader(): string {
+    if (this.fieldType === 'tenant') {
+      return 'Corrected Tenant Name';
+    }
+    if (this.fieldType === 'parent') {
+      return 'Corrected Parent Name';
+    }
     switch (this.bucket) {
       case 'excluded':
         return 'Master List Name';
