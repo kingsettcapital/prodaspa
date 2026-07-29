@@ -104,4 +104,23 @@ export class ValidationApiService {
       { headers: this.defaultHeaders() }
     );
   }
+
+  updateDraftDecisions(
+    fileId: string,
+    decisionsJson: string
+  ): Observable<{ fileId: string; status: string }> {
+    return this.http.patch<{ fileId: string; status: string }>(
+      this.buildUrl(`Validation/draft/${encodeURIComponent(fileId)}/decisions`),
+      { decisionsJson },
+      { headers: this.defaultHeaders() }
+    );
+  }
+
+  clearDraft(fileId: string): Observable<{ fileId: string; status: string }> {
+    return this.http.post<{ fileId: string; status: string }>(
+      this.buildUrl(`Validation/draft/${encodeURIComponent(fileId)}/clear`),
+      null,
+      { headers: this.defaultHeaders() }
+    );
+  }
 }

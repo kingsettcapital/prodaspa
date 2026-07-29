@@ -289,6 +289,24 @@
           </div>
 
           <div class="file-download" (click)="$event.stopPropagation()">
+            <div
+              class="autosave-warning"
+              *ngIf="autosaveWarning.has(fileIndex)"
+              role="status"
+            >
+              <span class="autosave-warning__text">
+                Auto-save isn't reaching the server. Use Save Draft to protect your work.
+              </span>
+              <button
+                type="button"
+                class="autosave-warning__dismiss"
+                (click)="dismissAutosaveWarning(fileIndex)"
+                aria-label="Dismiss auto-save warning"
+              >
+                <mat-icon class="autosave-warning__dismiss-icon">close</mat-icon>
+              </button>
+            </div>
+
             <div class="file-download__actions">
               <button
                 type="button"
@@ -318,11 +336,16 @@
               </button>
             </div>
 
-            <p class="file-save__status file-save__status--saved" *ngIf="draftSaveStatus(fileIndex) === 'saved'">
-              ✓ Draft saved
-            </p>
-            <p class="file-save__status file-save__status--error" *ngIf="draftSaveStatus(fileIndex) === 'error'">
-              Draft save failed — please try again.
+            <p class="file-save__status" aria-live="polite">
+              <ng-container [ngSwitch]="draftSaveStatus(fileIndex)">
+                <span *ngSwitchCase="'saving'">Saving…</span>
+                <span *ngSwitchCase="'saved'">
+                  Saved {{ autosaveLastSavedAt(fileIndex) | date:'shortTime' }}
+                </span>
+                <span *ngSwitchCase="'error'">Auto-save failed</span>
+                <span *ngSwitchCase="'closed'">Draft closed</span>
+                <span *ngSwitchDefault>&nbsp;</span>
+              </ng-container>
             </p>
 
             <div

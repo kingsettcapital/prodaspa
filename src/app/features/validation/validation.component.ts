@@ -1,4 +1,5 @@
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { MatButtonToggleChange } from '@angular/material/button-toggle';
 import { PageEvent } from '@angular/material/paginator';
 import { Subscription } from 'rxjs';
@@ -23,6 +24,20 @@ import {
   OverridePopoverRequest,
   ValidationRow
 } from './validation-result-table.component';
+
+type DraftSaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'closed';
+
+interface AutosaveState {
+  dirty: boolean;
+  debounceTimer: ReturnType<typeof setTimeout> | null;
+  maxWaitTimer: ReturnType<typeof setTimeout> | null;
+  inFlight: boolean;
+  pending: boolean;
+  persisted: boolean;
+  consecutiveFailures: number;
+  disarmed: boolean;
+  lastSavedAt: Date | null;
+}
 
 interface PendingOverride {
   fileIndex: number;
@@ -98,6 +113,9 @@ interface DownloadChecklistState {
 })
 export class ValidationComponent implements OnInit, OnDestroy {
   private static readonly DOWNLOAD_STEP_MS = 800;
+  private static readonly AUTOSAVE_DEBOUNCE_MS = 3000;
+  private static readonly AUTOSAVE_MAX_WAIT_MS = 30000;
+  private static readonly AUTOSAVE_FAILURE_THRESHOLD = 3;
 
   private static readonly BULK_CONFIRM_CONFIG: Record<BulkActionType, BulkConfirmConfig> = {
     'apply-all': {
@@ -140,7 +158,12 @@ export class ValidationComponent implements OnInit, OnDestroy {
   bucketPageState = new Map<string, { pageIndex: number; pageSize: number }>();
   corrections = new Map<string, StoredCorrectionRecord>();
   downloadProgressByFile = new Map<number, DownloadChecklistState>();
-  private draftSaveState = new Map();
+  private draftSaveState = new Map<number, DraftSaveStatus>();
+
+  private autosave = new Map<number, AutosaveState>();
+  private suppressAutosaveDirty = false;
+  autosaveWarning = new Set<number>();
+  private visibilityChangeHandler: (() => void) | null = null;
 
   private autoAlignApplied = false;
 
@@ -185,6 +208,8 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadDrafts();
+    this.visibilityChangeHandler = () => this.onDocumentVisibilityChange();
+    document.addEventListener('visibilitychange', this.visibilityChangeHandler);
   }
 
   get canValidate(): boolean {
@@ -240,6 +265,9 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   private resetResultsState(): void {
     this.clearAllDownloadRuns();
+    this.clearAllAutosaveTimers();
+    this.autosave.clear();
+    this.autosaveWarning = new Set<number>();
     this.batchResults = [];
     this.expandedFiles = new Set<number>();
     this.expandedFieldGroups = new Set<string>();
@@ -256,16 +284,67 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   clearBatch(fileInput?: HTMLInputElement): void {
+    const persistedIds: string[] = [];
+    this.batchResults.forEach((result, fileIndex) => {
+      const state = this.autosave.get(fileIndex);
+      if (state?.persisted && !state.disarmed) {
+        persistedIds.push(result.fileId);
+      }
+    });
+
+    if (persistedIds.length > 0) {
+      const confirmed = window.confirm(
+        'Clear this file? Your auto-saved draft will be permanently removed.'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    this.batchResults.forEach((result, fileIndex) => {
+      const state = this.autosave.get(fileIndex);
+      if (state?.persisted && !state.disarmed) {
+        this.clearAutosaveTimers(fileIndex);
+        state.disarmed = true;
+      }
+    });
+
     this.resetResultsState();
     this.selectedFiles = [];
     this.errorMessage = '';
     if (fileInput) {
       fileInput.value = '';
     }
+
+    if (persistedIds.length === 0) {
+      return;
+    }
+
+    let remaining = persistedIds.length;
+    const finishOne = (): void => {
+      remaining--;
+      if (remaining <= 0) {
+        this.loadDrafts();
+      }
+    };
+    persistedIds.forEach(fileId => {
+      this.validationApi.clearDraft(fileId).subscribe({
+        next: () => finishOne(),
+        error: err => {
+          console.warn('clearDraft failed', fileId, err);
+          finishOne();
+        }
+      });
+    });
   }
 
   ngOnDestroy(): void {
     this.clearAllDownloadRuns();
+    this.clearAllAutosaveTimers();
+    if (this.visibilityChangeHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
+      this.visibilityChangeHandler = null;
+    }
   }
 
   validate(): void {
@@ -281,6 +360,12 @@ export class ValidationComponent implements OnInit, OnDestroy {
       next: (results) => {
         this.batchResults = results;
         this.autoStageAlignments();
+        results.forEach((_, fileIndex) => {
+          this.ensureAutosaveState(fileIndex);
+          const state = this.autosave.get(fileIndex)!;
+          state.dirty = true;
+          this.flushAutosave(fileIndex);
+        });
         this.isLoading = false;
         this.loadHistory();
       },
@@ -916,6 +1001,9 @@ export class ValidationComponent implements OnInit, OnDestroy {
     map.delete(this.correctionKey(fileIndex, fieldType, row));
     this.corrections = map;
     this.bumpCorrectionsCache();
+    if (!this.suppressAutosaveDirty) {
+      this.markAutosaveDirty(fileIndex);
+    }
   }
 
   private correctionKey(fileIndex: number, fieldType: FieldType, row: ValidationRow): string {
@@ -952,6 +1040,9 @@ export class ValidationComponent implements OnInit, OnDestroy {
     map.set(this.correctionKey(fileIndex, fieldType, row), record);
     this.corrections = map;
     this.bumpCorrectionsCache();
+    if (!this.suppressAutosaveDirty) {
+      this.markAutosaveDirty(fileIndex);
+    }
   }
 
   downloadProgress(fileIndex: number): DownloadChecklistState | undefined {
@@ -962,19 +1053,38 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return this.downloadProgress(fileIndex)?.inProgress ?? false;
   }
 
-  draftSaveStatus(fileIndex: number): 'idle' | 'saving' | 'saved' | 'error' {
+  draftSaveStatus(fileIndex: number): DraftSaveStatus {
     return this.draftSaveState.get(fileIndex) ?? 'idle';
   }
 
+  autosaveLastSavedAt(fileIndex: number): Date | null {
+    return this.autosave.get(fileIndex)?.lastSavedAt ?? null;
+  }
+
+  dismissAutosaveWarning(fileIndex: number): void {
+    if (!this.autosaveWarning.has(fileIndex)) {
+      return;
+    }
+    const next = new Set(this.autosaveWarning);
+    next.delete(fileIndex);
+    this.autosaveWarning = next;
+  }
+
   canSaveDraft(fileIndex: number): boolean {
-    return this.correctionsForFile(fileIndex).length > 0
-      && this.draftSaveStatus(fileIndex) !== 'saving';
+    const status = this.draftSaveStatus(fileIndex);
+    return !!this.batchResults[fileIndex]
+      && status !== 'saving'
+      && status !== 'closed';
   }
 
   saveDraft(fileIndex: number): void {
     const file = this.selectedFiles[fileIndex];
     const batchResult = this.batchResults[fileIndex];
     if (!file || !batchResult) {
+      return;
+    }
+    const state = this.ensureAutosaveState(fileIndex);
+    if (state.disarmed) {
       return;
     }
     const payload = this.buildDownloadPayload(fileIndex);
@@ -985,7 +1095,13 @@ export class ValidationComponent implements OnInit, OnDestroy {
       .saveDraft(file, batchResult.fileId, file.name, resultsJson, decisionsJson)
       .subscribe({
         next: () => {
+          state.persisted = true;
+          state.consecutiveFailures = 0;
+          state.lastSavedAt = new Date();
+          state.dirty = false;
           this.draftSaveState.set(fileIndex, 'saved');
+          this.dismissAutosaveWarning(fileIndex);
+          this.loadDrafts();
         },
         error: () => {
           this.draftSaveState.set(fileIndex, 'error');
@@ -1056,6 +1172,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
           });
           this.triggerFileDownload(file, blob);
           this.downloadSubscriptions.delete(fileIndex);
+          this.disarmAutosave(fileIndex);
         },
         error: () => {
           if (this.downloadGeneration.get(fileIndex) !== generation) {
@@ -1131,6 +1248,164 @@ export class ValidationComponent implements OnInit, OnDestroy {
       parentCorrections,
       copyTenantToParent
     };
+  }
+
+  private ensureAutosaveState(fileIndex: number): AutosaveState {
+    let state = this.autosave.get(fileIndex);
+    if (!state) {
+      state = {
+        dirty: false,
+        debounceTimer: null,
+        maxWaitTimer: null,
+        inFlight: false,
+        pending: false,
+        persisted: false,
+        consecutiveFailures: 0,
+        disarmed: false,
+        lastSavedAt: null
+      };
+      this.autosave.set(fileIndex, state);
+    }
+    return state;
+  }
+
+  private markAutosaveDirty(fileIndex: number): void {
+    const state = this.ensureAutosaveState(fileIndex);
+    if (state.disarmed) {
+      return;
+    }
+    state.dirty = true;
+    if (state.debounceTimer != null) {
+      clearTimeout(state.debounceTimer);
+    }
+    state.debounceTimer = setTimeout(
+      () => this.flushAutosave(fileIndex),
+      ValidationComponent.AUTOSAVE_DEBOUNCE_MS
+    );
+    if (state.maxWaitTimer == null) {
+      state.maxWaitTimer = setTimeout(
+        () => this.flushAutosave(fileIndex),
+        ValidationComponent.AUTOSAVE_MAX_WAIT_MS
+      );
+    }
+  }
+
+  private flushAutosave(fileIndex: number): void {
+    const state = this.ensureAutosaveState(fileIndex);
+    this.clearAutosaveTimers(fileIndex);
+    if (state.disarmed || !state.dirty) {
+      return;
+    }
+    if (state.inFlight) {
+      state.pending = true;
+      return;
+    }
+
+    const file = this.selectedFiles[fileIndex];
+    const batchResult = this.batchResults[fileIndex];
+    if (!file || !batchResult) {
+      return;
+    }
+
+    state.dirty = false;
+    state.inFlight = true;
+    this.draftSaveState.set(fileIndex, 'saving');
+
+    const onSuccess = (): void => {
+      state.inFlight = false;
+      state.persisted = true;
+      state.consecutiveFailures = 0;
+      state.lastSavedAt = new Date();
+      this.draftSaveState.set(fileIndex, 'saved');
+      this.dismissAutosaveWarning(fileIndex);
+      this.loadDrafts();
+      if (state.pending) {
+        state.pending = false;
+        this.markAutosaveDirty(fileIndex);
+      }
+    };
+
+    const onFailure = (err: unknown): void => {
+      const status = err instanceof HttpErrorResponse ? err.status : 0;
+
+      if (status === 409) {
+        state.inFlight = false;
+        state.disarmed = true;
+        this.clearAutosaveTimers(fileIndex);
+        this.draftSaveState.set(fileIndex, 'closed');
+        return;
+      }
+
+      if (status === 404 && state.persisted) {
+        // PATCH path only — fall back to full multipart save once.
+        state.persisted = false;
+        state.dirty = true;
+        state.inFlight = false;
+        this.flushAutosave(fileIndex);
+        return;
+      }
+
+      state.inFlight = false;
+      state.consecutiveFailures++;
+      state.dirty = true;
+      this.draftSaveState.set(fileIndex, 'error');
+      if (state.consecutiveFailures >= ValidationComponent.AUTOSAVE_FAILURE_THRESHOLD) {
+        const next = new Set(this.autosaveWarning);
+        next.add(fileIndex);
+        this.autosaveWarning = next;
+      }
+    };
+
+    if (!state.persisted) {
+      const payload = this.buildDownloadPayload(fileIndex);
+      const resultsJson = JSON.stringify(batchResult);
+      const decisionsJson = JSON.stringify(payload);
+      this.validationApi
+        .saveDraft(file, batchResult.fileId, file.name, resultsJson, decisionsJson)
+        .subscribe({ next: () => onSuccess(), error: err => onFailure(err) });
+      return;
+    }
+
+    this.validationApi
+      .updateDraftDecisions(batchResult.fileId, JSON.stringify(this.buildDownloadPayload(fileIndex)))
+      .subscribe({ next: () => onSuccess(), error: err => onFailure(err) });
+  }
+
+  private disarmAutosave(fileIndex: number): void {
+    const state = this.ensureAutosaveState(fileIndex);
+    state.disarmed = true;
+    this.clearAutosaveTimers(fileIndex);
+    this.draftSaveState.set(fileIndex, 'closed');
+  }
+
+  private clearAutosaveTimers(fileIndex: number): void {
+    const state = this.autosave.get(fileIndex);
+    if (!state) {
+      return;
+    }
+    if (state.debounceTimer != null) {
+      clearTimeout(state.debounceTimer);
+      state.debounceTimer = null;
+    }
+    if (state.maxWaitTimer != null) {
+      clearTimeout(state.maxWaitTimer);
+      state.maxWaitTimer = null;
+    }
+  }
+
+  private clearAllAutosaveTimers(): void {
+    this.autosave.forEach((_state, fileIndex) => this.clearAutosaveTimers(fileIndex));
+  }
+
+  private onDocumentVisibilityChange(): void {
+    if (document.visibilityState !== 'hidden') {
+      return;
+    }
+    this.autosave.forEach((state, fileIndex) => {
+      if (state.dirty && !state.disarmed) {
+        this.flushAutosave(fileIndex);
+      }
+    });
   }
 
   private triggerFileDownload(file: File, blob: Blob): void {
@@ -1237,6 +1512,11 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
     this.validationApi.discardDraft(fileId).subscribe({
       next: () => {
+        this.batchResults.forEach((result, fileIndex) => {
+          if (result.fileId === fileId) {
+            this.disarmAutosave(fileIndex);
+          }
+        });
         this.loadDrafts();
         this.notify.success('Draft discarded.');
       },
@@ -1290,6 +1570,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
         this.batchResults = [batchResult];
 
         const skipped: string[] = [];
+        this.suppressAutosaveDirty = true;
         for (const d of decisions.tenantCorrections) {
         const row = this.batchResults[0].response.results
           .find(r => r.rowIndex === d.rowIndex);
@@ -1319,9 +1600,19 @@ export class ValidationComponent implements OnInit, OnDestroy {
             matchSource: d.matchSource
           });
         }
+        this.suppressAutosaveDirty = false;
 
         this.clearRowsForBucketCache();
         this.autoAlignApplied = true;
+        const resumed = this.ensureAutosaveState(0);
+        resumed.persisted = true;
+        resumed.dirty = false;
+        resumed.inFlight = false;
+        resumed.pending = false;
+        resumed.consecutiveFailures = 0;
+        resumed.disarmed = false;
+        resumed.lastSavedAt = detail.savedAt ? new Date(detail.savedAt) : null;
+        this.draftSaveState.set(0, 'saved');
         this.expandedFiles = new Set<number>([0]);
         this.activeFieldTabByFile = new Map<number, FieldType>([[0, 'tenant']]);
         this.bucketPageState = new Map<string, { pageIndex: number; pageSize: number }>();

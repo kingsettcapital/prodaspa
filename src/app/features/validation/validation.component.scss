@@ -1126,6 +1126,63 @@ $drafts-rail-bp: 75rem;
   cursor: not-allowed;
 }
 
+.file-save__status {
+  margin: 0.5rem 0 0;
+  min-height: 1.25rem;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  color: $text-muted;
+}
+
+.autosave-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid $suggested-border;
+  border-radius: 0.5rem;
+  background: $suggested-hover;
+  color: $suggested-color;
+}
+
+.autosave-warning__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.autosave-warning__dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: $suggested-color;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(180, 83, 9, 0.12);
+  }
+
+  &:focus-visible {
+    outline: 2px solid $upload-drag-border;
+    outline-offset: 1px;
+  }
+}
+
+.autosave-warning__dismiss-icon {
+  width: 1rem;
+  height: 1rem;
+  font-size: 1rem;
+}
+
 .download-checklist {
   margin-top: 0.75rem;
   padding: 0.75rem 1rem;
