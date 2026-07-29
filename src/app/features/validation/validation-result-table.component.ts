@@ -2,7 +2,8 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 import {
   ParentAppliesToItem,
   ParentValidationResult,
-  ValidationResult
+  ValidationResult,
+  isIdentityBackfillRow
 } from './models/validation.models';
 
 export type FieldType = 'tenant' | 'parent';
@@ -46,6 +47,12 @@ export class ValidationResultTableComponent {
   }
 
   get secondColumnHeader(): string {
+    if (this.fieldType === 'tenant') {
+      return 'Corrected Tenant Name';
+    }
+    if (this.fieldType === 'parent') {
+      return 'Corrected Parent Name';
+    }
     switch (this.bucket) {
       case 'excluded':
         return 'Master List Name';
@@ -63,7 +70,7 @@ export class ValidationResultTableComponent {
   }
 
   rowKey(row: ValidationRow): string {
-    return row.tenantName;
+    return String(row.rowIndex);
   }
 
   isAccepted(row: ValidationRow): boolean {
@@ -132,6 +139,9 @@ export class ValidationResultTableComponent {
   }
 
   isAcceptDisabled(row: ValidationRow): boolean {
+    if (isIdentityBackfillRow(row)) {
+      return !this.correctionText(row);
+    }
     if (!row.isAmbiguousMultiParty) {
       return false;
     }

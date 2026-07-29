@@ -1,4 +1,6 @@
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { MatButtonToggleChange } from '@angular/material/button-toggle';
+import { PageEvent } from '@angular/material/paginator';
 import { Subscription } from 'rxjs';
 import { ValidationApiService } from './services/validation-api.service';
 import { NotificationService } from 'src/app/core/services/notification.service';
@@ -12,7 +14,8 @@ import {
   ParentAppliesToItem,
   ParentValidationResult,
   ValidationHistory,
-  ValidationResult
+  ValidationResult,
+  isIdentityBackfillRow
 } from './models/validation.models';
 import {
   BucketKey,
@@ -33,6 +36,7 @@ interface PendingOverride {
 }
 
 export interface StoredCorrectionRecord {
+  rowIndex: number;
   fieldType: 'Tenant' | 'Parent';
   originalName: string;
   correctedName: string;
@@ -130,11 +134,18 @@ export class ValidationComponent implements OnInit, OnDestroy {
   expandedFiles = new Set<number>();
   expandedFieldGroups = new Set<string>();
   expandedSections = new Set<string>();
+  /** Active Tenant/Parent tab per file card. Not persisted to drafts. */
+  activeFieldTabByFile = new Map<number, FieldType>();
+  /** Page index/size per (fileIndex, fieldType, bucketKey). Not persisted to drafts. */
+  bucketPageState = new Map<string, { pageIndex: number; pageSize: number }>();
   corrections = new Map<string, StoredCorrectionRecord>();
   downloadProgressByFile = new Map<number, DownloadChecklistState>();
   private draftSaveState = new Map();
 
   private autoAlignApplied = false;
+
+  readonly defaultPageSize = 50;
+  readonly pageSizeOptions = [25, 50, 100];
 
   /** FIX 3: bump when corrections mutate so table inputs reuse stable Map/Set refs. */
   private correctionsVersion = 0;
@@ -178,19 +189,6 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   get canValidate(): boolean {
     return this.selectedFiles.length > 0 && !this.isLoading;
-  }
-
-  get asOfDisplay(): string {
-    if (!this.asOfDate) {
-      return '';
-    }
-    const [y, m, d] = this.asOfDate.split('-').map(Number);
-    const dt = new Date(y, m - 1, d);
-    return dt.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
   }
 
   private todayLocalIso(): string {
@@ -247,6 +245,8 @@ export class ValidationComponent implements OnInit, OnDestroy {
     this.expandedFieldGroups = new Set<string>();
     this.parentCopyConfirmed.clear();
     this.expandedSections = new Set<string>();
+    this.activeFieldTabByFile = new Map<number, FieldType>();
+    this.bucketPageState = new Map<string, { pageIndex: number; pageSize: number }>();
     this.corrections = new Map<string, StoredCorrectionRecord>();
     this.downloadProgressByFile = new Map<number, DownloadChecklistState>();
     this.draftSaveState.clear();
@@ -358,17 +358,115 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   cancelParentCopy(fileIndex: number, event?: Event): void {
     event?.stopPropagation();
-    this.toggleFieldGroup(fileIndex, 'parent');
+    this.setActiveFieldTab(fileIndex, 'tenant');
   }
 
   fieldGroupsFor(fileIndex: number): FieldGroupConfig[] {
     const groups: FieldGroupConfig[] = [
-      { type: 'tenant', label: 'Tenant names', nameColumnLabel: 'Tenant Name' }
+      { type: 'tenant', label: 'Tenant names', nameColumnLabel: 'Source Tenant Name' }
     ];
     if (this.hasParentResponse(fileIndex)) {
-      groups.push({ type: 'parent', label: 'Parent names', nameColumnLabel: 'Parent Name' });
+      groups.push({ type: 'parent', label: 'Parent names', nameColumnLabel: 'Source Parent Name' });
     }
     return groups;
+  }
+
+  fieldGroupConfig(fieldType: FieldType): FieldGroupConfig {
+    return fieldType === 'parent'
+      ? { type: 'parent', label: 'Parent names', nameColumnLabel: 'Source Parent Name' }
+      : { type: 'tenant', label: 'Tenant names', nameColumnLabel: 'Source Tenant Name' };
+  }
+
+  activeFieldType(fileIndex: number): FieldType {
+    const tab = this.activeFieldTabByFile.get(fileIndex) ?? 'tenant';
+    return tab === 'parent' && this.hasParentResponse(fileIndex) ? 'parent' : 'tenant';
+  }
+
+  onFieldToggleChange(fileIndex: number, event: MatButtonToggleChange): void {
+    const type = event.value === 'parent' ? 'parent' : 'tenant';
+    this.setActiveFieldTab(fileIndex, type);
+  }
+
+  private setActiveFieldTab(fileIndex: number, fieldType: FieldType): void {
+    const map = new Map(this.activeFieldTabByFile);
+    map.set(fileIndex, fieldType);
+    this.activeFieldTabByFile = map;
+  }
+
+  fieldGroupRowCount(fileIndex: number, fieldType: FieldType): number {
+    return this.displayBuckets.reduce(
+      (sum, bucket) => sum + this.bucketCount(fileIndex, fieldType, bucket.key),
+      0
+    );
+  }
+
+  private pageStateKey(fileIndex: number, fieldType: FieldType, bucket: BucketKey): string {
+    return `${fileIndex}|${fieldType}|${bucket}`;
+  }
+
+  pageIndexFor(fileIndex: number, fieldType: FieldType, bucket: BucketKey): number {
+    return this.bucketPageState.get(this.pageStateKey(fileIndex, fieldType, bucket))?.pageIndex ?? 0;
+  }
+
+  pageSizeFor(fileIndex: number, fieldType: FieldType, bucket: BucketKey): number {
+    return this.bucketPageState.get(this.pageStateKey(fileIndex, fieldType, bucket))?.pageSize
+      ?? this.defaultPageSize;
+  }
+
+  shouldShowPaginator(fileIndex: number, fieldType: FieldType, bucket: BucketKey): boolean {
+    return this.bucketCount(fileIndex, fieldType, bucket) > this.pageSizeFor(fileIndex, fieldType, bucket);
+  }
+
+  onBucketPage(
+    fileIndex: number,
+    fieldType: FieldType,
+    bucket: BucketKey,
+    event: PageEvent
+  ): void {
+    this.invalidatePagedSliceCache(fileIndex, fieldType, bucket);
+    const map = new Map(this.bucketPageState);
+    map.set(this.pageStateKey(fileIndex, fieldType, bucket), {
+      pageIndex: event.pageIndex,
+      pageSize: event.pageSize
+    });
+    this.bucketPageState = map;
+  }
+
+  /**
+   * View-only page slice for the table binding. Full-bucket consumers must keep
+   * calling rowsForDisplayBucket — never this method.
+   */
+  rowsForPagedDisplayBucket(
+    fileIndex: number,
+    fieldType: FieldType,
+    key: BucketKey
+  ): ValidationRow[] {
+    const pageIndex = this.pageIndexFor(fileIndex, fieldType, key);
+    const pageSize = this.pageSizeFor(fileIndex, fieldType, key);
+    const cacheKey = `paged|${fileIndex}|${fieldType}|${key}|${pageIndex}|${pageSize}`;
+    const cached = this.rowsForBucketCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const all = this.rowsForDisplayBucket(fileIndex, fieldType, key);
+    const start = pageIndex * pageSize;
+    const rows = all.slice(start, start + pageSize);
+    this.rowsForBucketCache.set(cacheKey, rows);
+    return rows;
+  }
+
+  private invalidatePagedSliceCache(
+    fileIndex: number,
+    fieldType: FieldType,
+    bucket: BucketKey
+  ): void {
+    const prefix = `paged|${fileIndex}|${fieldType}|${bucket}|`;
+    for (const key of Array.from(this.rowsForBucketCache.keys())) {
+      if (key.startsWith(prefix)) {
+        this.rowsForBucketCache.delete(key);
+      }
+    }
   }
 
   rowsForBucket(fileIndex: number, fieldType: FieldType, bucket: BucketKey): ValidationRow[] {
@@ -629,7 +727,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   private tableRowKey(fieldType: FieldType, row: ValidationRow): string {
-    return row.tenantName;
+    return String(row.rowIndex);
   }
 
   acceptAsIsEligibleCount(fileIndex: number, fieldType: FieldType): number {
@@ -637,6 +735,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return this.rowsForDisplayBucket(fileIndex, fieldType, 'new')
       .filter(row =>
         !row.isAmbiguousMultiParty
+        && !isIdentityBackfillRow(row)
         && !acceptedKeys.has(this.tableRowKey(fieldType, row)))
       .length;
   }
@@ -648,6 +747,12 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   dismissAmbiguousNotice(): void {
     this.pendingAmbiguousNotice = null;
+  }
+
+  noticeReason(row: ValidationRow): string {
+    return row.isAmbiguousMultiParty
+      ? 'Ambiguous name'
+      : 'Parent filled from tenant name';
   }
 
   noticeUnit(row: ValidationRow): string {
@@ -754,15 +859,18 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   private executeAcceptAllAsIs(fileIndex: number, fieldType: FieldType): void {
     for (const row of this.rowsForDisplayBucket(fileIndex, fieldType, 'new')) {
-      if (row.isAmbiguousMultiParty) {
+      if (row.isAmbiguousMultiParty || isIdentityBackfillRow(row)) {
         continue;
       }
       this.acceptRow(fileIndex, fieldType, row);
     }
 
     const ambiguous = this.ambiguousNewRows(fileIndex, fieldType);
-    if (ambiguous.length > 0) {
-      this.pendingAmbiguousNotice = { fileIndex, fieldType, rows: ambiguous };
+    const identityBackfill = this.rowsForDisplayBucket(fileIndex, fieldType, 'new')
+      .filter(row => !row.isAmbiguousMultiParty && isIdentityBackfillRow(row));
+    const blocked = [...ambiguous, ...identityBackfill];
+    if (blocked.length > 0) {
+      this.pendingAmbiguousNotice = { fileIndex, fieldType, rows: blocked };
     }
   }
 
@@ -812,7 +920,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   private correctionKey(fileIndex: number, fieldType: FieldType, row: ValidationRow): string {
     const scope = fieldType === 'tenant' ? 'tenant' : 'parent';
-    return `${fileIndex}|${scope}|${row.tenantName}`;
+    return `${fileIndex}|${scope}|${row.rowIndex}`;
   }
 
   private setCorrection(
@@ -827,8 +935,9 @@ export class ValidationComponent implements OnInit, OnDestroy {
     }
   ): void {
     const map = new Map(this.corrections);
-    const record: StoredCorrectionRecord = {
-      fieldType: fieldType === 'tenant' ? 'Tenant' : 'Parent',
+  const record: StoredCorrectionRecord = {
+    rowIndex: row.rowIndex,
+    fieldType: fieldType === 'tenant' ? 'Tenant' : 'Parent',
       originalName: row.tenantName,
       correctedName: update.correctedName,
       changeType: update.changeType,
@@ -993,6 +1102,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     const tenantCorrections = this.correctionsForFile(fileIndex)
       .filter(c => c.fieldType === 'Tenant')
       .flatMap(c => this.correctionTargets(c).map(target => ({
+        rowIndex: c.rowIndex,
         unitId: target.unit,
         building: target.building,
         originalName: c.originalName,
@@ -1004,6 +1114,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     const parentCorrections = this.correctionsForFile(fileIndex)
       .filter(c => c.fieldType === 'Parent')
       .map(c => ({
+        rowIndex: c.rowIndex,
         originalName: c.originalName,
         correctedName: c.correctedName,
         changeType: c.changeType,
@@ -1180,8 +1291,8 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
         const skipped: string[] = [];
         for (const d of decisions.tenantCorrections) {
-          const row = this.batchResults[0].response.results
-            .find(r => r.tenantName === d.originalName);
+        const row = this.batchResults[0].response.results
+          .find(r => r.rowIndex === d.rowIndex);
           if (!row) {
             skipped.push(`tenant:${d.originalName}`);
             continue;
@@ -1195,8 +1306,8 @@ export class ValidationComponent implements OnInit, OnDestroy {
         }
 
         for (const d of decisions.parentCorrections) {
-          const row = this.batchResults[0].parentResponse?.results
-            .find(r => r.tenantName === d.originalName);
+        const row = this.batchResults[0].parentResponse?.results
+          .find(r => r.rowIndex === d.rowIndex);
           if (!row) {
             skipped.push(`parent:${d.originalName}`);
             continue;
@@ -1212,6 +1323,8 @@ export class ValidationComponent implements OnInit, OnDestroy {
         this.clearRowsForBucketCache();
         this.autoAlignApplied = true;
         this.expandedFiles = new Set<number>([0]);
+        this.activeFieldTabByFile = new Map<number, FieldType>([[0, 'tenant']]);
+        this.bucketPageState = new Map<string, { pageIndex: number; pageSize: number }>();
 
         if (skipped.length > 0) {
           console.warn(

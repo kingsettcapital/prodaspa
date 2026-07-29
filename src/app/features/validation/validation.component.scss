@@ -70,19 +70,12 @@ $upload-drag-bg: #eff6ff;
   }
 }
 
-.upload-zone {
-  cursor: pointer;
-  border: 2px dashed $card-border;
-  border-radius: 0.75rem;
+.upload-bar {
+  border: 1px solid $card-border;
+  border-radius: 0.5rem;
   background: #fff;
-  min-height: 160px;
-  padding: 1.5rem 1.5rem;
-  text-align: center;
+  padding: 0.75rem 1rem;
   transition: border-color 0.15s ease, background-color 0.15s ease;
-
-  &:hover {
-    border-color: darken($card-border, 8%);
-  }
 
   &--dragging {
     border-color: $upload-drag-border;
@@ -93,74 +86,108 @@ $upload-drag-bg: #eff6ff;
     display: none;
   }
 
-  &__count {
-    margin: 0 0 1rem;
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    min-height: 2.75rem;
+  }
+
+  &__icon {
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2rem;
+    font-size: 2rem;
+    color: $text-muted;
+  }
+
+  &__body {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: left;
+  }
+
+  &__title {
+    margin: 0;
     font-size: 0.875rem;
-    font-weight: 500;
-    color: $text-secondary;
+    font-weight: 600;
+    color: $text-primary;
+    line-height: 1.35;
+  }
+
+  &__hint {
+    margin: 0.125rem 0 0;
+    font-size: 0.75rem;
+    color: $text-muted;
+    line-height: 1.35;
   }
 
   &__file-list {
     list-style: none;
-    margin: 0;
+    margin: 0.35rem 0 0;
     padding: 0;
-    text-align: left;
-    max-width: 32rem;
-    margin-left: auto;
-    margin-right: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
   }
 
   &__file-item {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    margin-bottom: 0.5rem;
-    border: 1px solid $card-border;
-    border-radius: 0.5rem;
-    background: #f9fafb;
+    gap: 0.375rem;
+    min-width: 0;
   }
 
-  &__file-icon {
-    color: $correct-color;
-    width: 1.25rem;
-    height: 1.25rem;
-    font-size: 1.25rem;
+  &__file-check {
     flex-shrink: 0;
+    width: 1rem;
+    height: 1rem;
+    font-size: 1rem;
+    color: $correct-color;
   }
 
   &__file-name {
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 500;
-    color: $text-primary;
-    word-break: break-all;
+    color: $text-secondary;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  &__empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.75rem;
+  &__btn {
+    flex-shrink: 0;
+    margin-left: auto;
+    padding: 0.5rem 0.875rem;
+    border: none;
+    border-radius: 0.375rem;
+    background: $primary-btn;
+    color: #fff;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.25;
+    cursor: pointer;
+    white-space: nowrap;
+
+    &:hover {
+      background: $primary-btn-hover;
+    }
+
+    &:focus-visible {
+      outline: 2px solid $upload-drag-border;
+      outline-offset: 2px;
+    }
   }
 
-  &__empty-icon {
-    width: 3rem;
-    height: 3rem;
-    font-size: 3rem;
-    color: #9ca3af;
-  }
+  @media (max-width: 640px) {
+    &__row {
+      flex-wrap: wrap;
+    }
 
-  &__empty-title {
-    margin: 0;
-    font-size: 1.125rem;
-    font-weight: 500;
-    color: #1f2937;
-  }
-
-  &__empty-hint {
-    margin: 0;
-    font-size: 0.875rem;
-    color: $text-muted;
+    &__btn {
+      margin-left: 0;
+      width: 100%;
+    }
   }
 }
 
@@ -348,16 +375,15 @@ $upload-drag-bg: #eff6ff;
 }
 
 .file-card {
-  overflow: hidden;
   border: 1px solid $card-border;
   border-radius: 0.75rem;
   background: #fff;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 
   &__header {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    justify-content: space-between;
     gap: 1rem;
     padding: 0.75rem 1rem;
     cursor: pointer;
@@ -373,10 +399,15 @@ $upload-drag-bg: #eff6ff;
     min-width: 0;
     align-items: center;
     gap: 0.75rem;
+    justify-self: start;
+  }
+
+  &__header-center {
+    justify-self: center;
   }
 
   &__header-right {
-    flex-shrink: 0;
+    justify-self: end;
   }
 
   &__chevron {
@@ -407,6 +438,73 @@ $upload-drag-bg: #eff6ff;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    min-height: 0;
+  }
+
+  &__scroll {
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 240px;
+    max-height: calc(100vh - 280px);
+  }
+}
+
+.field-toggle {
+  border: none;
+  border-radius: 6px;
+  box-shadow: none;
+
+  ::ng-deep .mat-button-toggle {
+    background: #ffffff;
+    color: #0d2544;
+    font-size: 13px;
+    font-weight: 400;
+    border: 1px solid #d6dbe2;
+    border-radius: 0;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  // Collapse Material's adjacent divider + our own borders into one seam.
+  ::ng-deep .mat-button-toggle + .mat-button-toggle {
+    border-left-color: #d6dbe2;
+    margin-left: -1px;
+  }
+
+  ::ng-deep .mat-button-toggle:first-child {
+    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px;
+  }
+
+  ::ng-deep .mat-button-toggle:last-child {
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
+  }
+
+  ::ng-deep .mat-button-toggle-checked {
+    background: #0d2544;
+    color: #ffffff;
+    font-weight: 500;
+    border-color: #0d2544;
+    position: relative;
+    z-index: 1;
+  }
+
+  ::ng-deep .mat-button-toggle:not(.mat-button-toggle-checked):hover {
+    background: #f4f6f9;
+    border-color: #0d2544;
+  }
+
+  ::ng-deep .mat-button-toggle-label-content {
+    line-height: normal;
+    padding: 6px 16px;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  ::ng-deep .mat-button-toggle-button:focus-visible {
+    outline: 2px solid #0d2544;
+    outline-offset: 2px;
   }
 }
 
@@ -414,7 +512,6 @@ $upload-drag-bg: #eff6ff;
   border: 1px solid $card-border;
   border-radius: 0.5rem;
   background: #fff;
-  overflow: hidden;
 
   &__header {
     display: flex;
@@ -450,7 +547,6 @@ $upload-drag-bg: #eff6ff;
   border: 1px solid $card-border;
   border-radius: 0.5rem;
   background: #fff;
-  overflow: hidden;
 
   &__header {
     display: flex;
@@ -494,6 +590,17 @@ $upload-drag-bg: #eff6ff;
     font-size: 0.8125rem;
     font-style: italic;
     color: $text-muted;
+  }
+}
+
+.bucket-paginator {
+  border-top: 1px solid $card-border;
+  background: #fff;
+
+  ::ng-deep .mat-paginator-container {
+    min-height: 44px;
+    padding: 0 0.5rem;
+    justify-content: flex-end;
   }
 }
 
@@ -1072,8 +1179,13 @@ $upload-drag-bg: #eff6ff;
   }
 
   .file-card__header {
-    flex-direction: column;
-    align-items: flex-start;
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .file-card__header-center,
+  .file-card__header-right {
+    justify-self: start;
   }
 }
 

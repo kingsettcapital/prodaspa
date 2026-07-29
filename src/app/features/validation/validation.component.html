@@ -10,9 +10,8 @@
     <div class="validation-layout">
       <div class="validation-layout__main">
     <section
-      class="upload-zone"
-      [class.upload-zone--dragging]="isDragging"
-      (click)="fileInput.click()"
+      class="upload-bar"
+      [class.upload-bar--dragging]="isDragging"
       (dragover)="onDragOver($event)"
       (dragleave)="onDragLeave()"
       (drop)="onDrop($event)"
@@ -22,27 +21,38 @@
         type="file"
         accept=".xlsx"
         multiple
-        class="upload-zone__input"
+        class="upload-bar__input"
         (change)="onFilesSelected($event)"
       />
 
-      <div class="upload-zone__content" *ngIf="selectedFiles.length > 0; else uploadEmpty">
-        <p class="upload-zone__count">{{ selectedFiles.length }} files selected</p>
-        <ul class="upload-zone__file-list">
-          <li class="upload-zone__file-item" *ngFor="let file of selectedFiles">
-            <mat-icon class="upload-zone__file-icon">check_circle</mat-icon>
-            <span class="upload-zone__file-name">{{ file.name }}</span>
-          </li>
-        </ul>
-      </div>
+      <div class="upload-bar__row">
+        <mat-icon class="upload-bar__icon" aria-hidden="true">upload_file</mat-icon>
 
-      <ng-template #uploadEmpty>
-        <div class="upload-zone__empty">
-          <mat-icon class="upload-zone__empty-icon">cloud_upload</mat-icon>
-          <p class="upload-zone__empty-title">Drag and drop your .xlsx file here</p>
-          <p class="upload-zone__empty-hint">or click to browse</p>
+        <div class="upload-bar__body" *ngIf="selectedFiles.length > 0; else uploadEmpty">
+          <p class="upload-bar__title">{{ selectedFiles.length }} file{{ selectedFiles.length === 1 ? '' : 's' }} selected</p>
+          <ul class="upload-bar__file-list">
+            <li class="upload-bar__file-item" *ngFor="let file of selectedFiles">
+              <mat-icon class="upload-bar__file-check">check_circle</mat-icon>
+              <span class="upload-bar__file-name">{{ file.name }}</span>
+            </li>
+          </ul>
         </div>
-      </ng-template>
+
+        <ng-template #uploadEmpty>
+          <div class="upload-bar__body">
+            <p class="upload-bar__title">Upload rent roll</p>
+            <p class="upload-bar__hint">Excel (.xlsx) · drag and drop or use the button</p>
+          </div>
+        </ng-template>
+
+        <button
+          type="button"
+          class="upload-bar__btn"
+          (click)="fileInput.click()"
+        >
+          Add new files
+        </button>
+      </div>
     </section>
 
     <label class="asof-field">
@@ -66,7 +76,6 @@
     </div>
 
     <section class="file-results" *ngIf="batchResults.length > 0">
-      <p class="asof-note">Showing tenants in place as of {{ asOfDisplay }}.</p>
       <div
         class="file-card"
         *ngFor="let result of batchResults; let fileIndex = index; trackBy: trackByFileName"
@@ -78,6 +87,28 @@
             </span>
             <span class="file-card__name">{{ result.fileName }}</span>
           </div>
+          <div class="file-card__header-center">
+            <mat-button-toggle-group
+              *ngIf="isFileExpanded(fileIndex) && hasParentResponse(fileIndex)"
+              class="field-toggle"
+              [value]="activeFieldType(fileIndex)"
+              (change)="onFieldToggleChange(fileIndex, $event)"
+              (click)="$event.stopPropagation()"
+            >
+              <mat-button-toggle
+                value="tenant"
+                (click)="$event.stopPropagation()"
+              >
+                Tenant names ({{ fieldGroupRowCount(fileIndex, 'tenant') }})
+              </mat-button-toggle>
+              <mat-button-toggle
+                value="parent"
+                (click)="$event.stopPropagation()"
+              >
+                Parent names ({{ fieldGroupRowCount(fileIndex, 'parent') }})
+              </mat-button-toggle>
+            </mat-button-toggle-group>
+          </div>
           <div class="file-card__header-right">
             <span class="file-card__corrections-badge" *ngIf="acceptedCount(fileIndex) > 0">
               {{ acceptedCount(fileIndex) }} corrections ready
@@ -86,21 +117,12 @@
         </div>
 
         <div class="file-card__body" *ngIf="isFileExpanded(fileIndex)">
-          <div
-            class="field-group"
-            *ngFor="let fieldGroup of fieldGroupsFor(fileIndex)"
-          >
-            <div
-              class="field-group__header"
-              (click)="toggleFieldGroup(fileIndex, fieldGroup.type, $event)"
-            >
-              <span class="field-group__chevron" aria-hidden="true">
-                {{ isFieldGroupExpanded(fileIndex, fieldGroup.type) ? '▾' : '▸' }}
-              </span>
-              <span class="field-group__label">{{ fieldGroup.label }}</span>
-            </div>
+          <div class="file-card__scroll">
+          <ng-container
+            *ngTemplateOutlet="fieldBucketsTpl; context: { fileIndex: fileIndex, fieldGroup: fieldGroupConfig(activeFieldType(fileIndex)) }"
+          ></ng-container>
 
-            <div class="field-group__body" *ngIf="isFieldGroupExpanded(fileIndex, fieldGroup.type)">
+          <ng-template #fieldBucketsTpl let-fileIndex="fileIndex" let-fieldGroup="fieldGroup">
               <div
                 class="parent-copy-prompt"
                 *ngIf="fieldGroup.type === 'parent' && isParentCopyPending(fileIndex)"
@@ -183,7 +205,7 @@
                       [fieldType]="fieldGroup.type"
                       [bucket]="bucket.key"
                       [nameColumnLabel]="fieldGroup.nameColumnLabel"
-                      [rows]="rowsForDisplayBucket(fileIndex, fieldGroup.type, bucket.key)"
+                      [rows]="rowsForPagedDisplayBucket(fileIndex, fieldGroup.type, bucket.key)"
                       [acceptedKeys]="tableAcceptedKeys(fileIndex, fieldGroup.type)"
                       [correctionByKey]="tableCorrectionMap(fileIndex, fieldGroup.type)"
                       (accept)="onTableAccept(fileIndex, fieldGroup.type, $event)"
@@ -191,10 +213,21 @@
                       (manual)="onTableManual(fileIndex, fieldGroup.type, $event)"
                       (clear)="onTableClear(fileIndex, fieldGroup.type, $event)"
                     ></app-validation-result-table>
+                    <mat-paginator
+                      *ngIf="shouldShowPaginator(fileIndex, fieldGroup.type, bucket.key)"
+                      class="bucket-paginator"
+                      [length]="bucketCount(fileIndex, fieldGroup.type, bucket.key)"
+                      [pageIndex]="pageIndexFor(fileIndex, fieldGroup.type, bucket.key)"
+                      [pageSize]="pageSizeFor(fileIndex, fieldGroup.type, bucket.key)"
+                      [pageSizeOptions]="pageSizeOptions"
+                      [showFirstLastButtons]="true"
+                      (page)="onBucketPage(fileIndex, fieldGroup.type, bucket.key, $event)"
+                      aria-label="Select page of validation results"
+                    ></mat-paginator>
                   </div>
                 </div>
               </ng-container>
-            </div>
+          </ng-template>
           </div>
 
           <div class="file-download" (click)="$event.stopPropagation()">
@@ -463,13 +496,13 @@
         Rows needing manual review
       </h2>
       <p class="confirm-dialog__description">
-        These names contain AND/OR and cannot be accepted as-is automatically.
+        These rows cannot be accepted as-is automatically.
         Enter the correct name on each row.
       </p>
       <ul class="confirm-dialog__list">
         <li *ngFor="let row of pendingAmbiguousNotice.rows">
           <span class="confirm-dialog__list-meta">
-            {{ noticeUnit(row) }} · {{ noticeBuilding(row) }}
+            {{ noticeUnit(row) }} · {{ noticeBuilding(row) }} · {{ noticeReason(row) }}
           </span>
           <span class="confirm-dialog__list-name">{{ row.tenantName }}</span>
         </li>
