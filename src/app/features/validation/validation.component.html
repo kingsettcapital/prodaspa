@@ -1,5 +1,8 @@
 <div class="validation-page">
-  <div class="validation-page__inner">
+  <div
+    class="validation-page__inner"
+    [class.validation-page__inner--with-drafts]="hasInProgressDrafts"
+  >
     <header class="validation-header">
       <h1 class="validation-header__title">Tenant Name Validation</h1>
       <p class="validation-header__subtitle">
@@ -7,8 +10,15 @@
       </p>
     </header>
 
-    <div class="validation-layout">
-      <div class="validation-layout__main">
+    <div
+      class="validation-layout"
+      [class.validation-layout--with-drafts]="hasInProgressDrafts"
+    >
+      <div
+        class="validation-layout__top"
+        [class.validation-layout__top--with-drafts]="hasInProgressDrafts"
+      >
+        <div class="validation-layout__controls">
     <section
       class="upload-bar"
       [class.upload-bar--dragging]="isDragging"
@@ -54,7 +64,55 @@
         </button>
       </div>
     </section>
+        </div>
 
+        <aside
+          class="validation-layout__rail"
+          *ngIf="hasInProgressDrafts"
+          aria-label="Drafts in progress"
+        >
+          <section class="drafts-panel">
+            <header class="drafts-panel__head">
+              <mat-icon class="drafts-panel__icon" aria-hidden="true">history</mat-icon>
+              <h2 class="drafts-panel__title">Drafts in progress</h2>
+              <span class="drafts-panel__count">{{ inProgressDrafts.length }}</span>
+            </header>
+            <ul class="drafts-panel__list">
+              <li
+                class="drafts-panel__row"
+                *ngFor="let d of inProgressDrafts; trackBy: trackByDraftFileId"
+              >
+                <div class="drafts-panel__info">
+                  <span class="drafts-panel__name" [title]="d.fileName">{{ d.fileName }}</span>
+                  <span class="drafts-panel__meta">
+                    Saved {{ d.savedAt | date:'medium':'America/Toronto' }}
+                  </span>
+                </div>
+                <div class="drafts-panel__actions">
+                  <button
+                    type="button"
+                    class="drafts-panel__resume"
+                    (click)="resumeDraft(d.fileId)"
+                  >
+                    Resume
+                  </button>
+                  <button
+                    type="button"
+                    class="drafts-panel__discard"
+                    (click)="discardDraft(d.fileId)"
+                    aria-label="Discard draft"
+                    title="Discard draft"
+                  >
+                    <mat-icon class="drafts-panel__discard-icon">delete_outline</mat-icon>
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </section>
+        </aside>
+      </div>
+
+      <div class="validation-layout__work">
     <label class="asof-field">
       As-of date
       <input type="date" [(ngModel)]="asOfDate" name="asOfDate" />
@@ -377,47 +435,6 @@
       </div>
     </section>
       </div>
-
-      <aside class="validation-layout__rail" *ngIf="hasInProgressDrafts">
-        <section class="resume-banner">
-          <div class="resume-banner__head">
-            <mat-icon class="resume-banner__icon">history</mat-icon>
-            <p class="resume-banner__title">Drafts in progress</p>
-          </div>
-          <div class="resume-banner__list">
-            <div
-              class="resume-draft"
-              *ngFor="let d of inProgressDrafts; trackBy: trackByDraftFileId"
-            >
-              <div class="resume-draft__header">
-                <div class="resume-draft__meta">
-                  <span class="resume-draft__name">{{ d.fileName }}</span>
-                  <span class="resume-draft__detail">
-                    Saved {{ d.savedAt | date:'medium':'America/Toronto' }}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  class="resume-draft__discard"
-                  (click)="discardDraft(d.fileId)"
-                  aria-label="Discard draft"
-                  title="Discard draft"
-                >
-                  <mat-icon class="resume-draft__discard-icon">delete_outline</mat-icon>
-                </button>
-              </div>
-              <button
-                type="button"
-                class="resume-draft__btn"
-                (click)="resumeDraft(d.fileId)"
-              >
-                Resume
-                <mat-icon class="resume-draft__btn-icon">arrow_forward</mat-icon>
-              </button>
-            </div>
-          </div>
-        </section>
-      </aside>
     </div>
   </div>
 
