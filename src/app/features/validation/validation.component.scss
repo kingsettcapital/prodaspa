@@ -1,5 +1,11 @@
 $page-bg: #f9fafb;
 $card-border: #e5e7eb;
+// Shared chrome for the in-card view controls (field toggle + search).
+$control-border: #d6dbe2;
+$control-text: #0d2544;
+$control-height: 32px;
+$control-radius: 6px;
+$control-font-size: 13px;
 $text-primary: #111827;
 $text-secondary: #4b5563;
 $text-muted: #6b7280;
@@ -585,6 +591,86 @@ $drafts-rail-bp: 75rem;
     justify-self: center;
   }
 
+  // Mirrors the header grid so the search sits under the field toggle.
+  &__filters {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid #f3f4f6;
+  }
+
+  &__filters-summary {
+    grid-column: 3;
+    justify-self: end;
+    font-size: 0.75rem;
+    color: $text-muted;
+  }
+
+  &__search {
+    grid-column: 2;
+    justify-self: center;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    width: 280px;
+    height: $control-height;
+    padding: 0 0.5rem;
+    border: 1px solid $control-border;
+    border-radius: $control-radius;
+    background: #fff;
+
+    &:focus-within {
+      border-color: $new-border;
+      box-shadow: 0 0 0 3px rgba($new-border, 0.18);
+    }
+  }
+
+  &__search-icon,
+  &__search-clear ::ng-deep .mat-icon {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+    line-height: 16px;
+  }
+
+  &__search-icon {
+    color: $text-muted;
+  }
+
+  &__search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: $control-font-size;
+    color: $control-text;
+
+    &::placeholder {
+      color: $text-muted;
+    }
+  }
+
+  &__search-clear {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: $text-muted;
+    cursor: pointer;
+
+    &:hover {
+      color: $text-primary;
+    }
+  }
+
   &__header-right {
     justify-self: end;
   }
@@ -620,9 +706,10 @@ $drafts-rail-bp: 75rem;
     min-height: 0;
   }
 
+  // Sole scrollport for the card: sticky table headers pin against this box.
   &__scroll {
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: auto;
     min-height: 240px;
     max-height: calc(100vh - 280px);
   }
@@ -630,15 +717,15 @@ $drafts-rail-bp: 75rem;
 
 .field-toggle {
   border: none;
-  border-radius: 6px;
+  border-radius: $control-radius;
   box-shadow: none;
 
   ::ng-deep .mat-button-toggle {
     background: #ffffff;
-    color: #0d2544;
-    font-size: 13px;
+    color: $control-text;
+    font-size: $control-font-size;
     font-weight: 400;
-    border: 1px solid #d6dbe2;
+    border: 1px solid $control-border;
     border-radius: 0;
     text-transform: none;
     letter-spacing: normal;
@@ -646,18 +733,18 @@ $drafts-rail-bp: 75rem;
 
   // Collapse Material's adjacent divider + our own borders into one seam.
   ::ng-deep .mat-button-toggle + .mat-button-toggle {
-    border-left-color: #d6dbe2;
+    border-left-color: $control-border;
     margin-left: -1px;
   }
 
   ::ng-deep .mat-button-toggle:first-child {
-    border-top-left-radius: 6px;
-    border-bottom-left-radius: 6px;
+    border-top-left-radius: $control-radius;
+    border-bottom-left-radius: $control-radius;
   }
 
   ::ng-deep .mat-button-toggle:last-child {
-    border-top-right-radius: 6px;
-    border-bottom-right-radius: 6px;
+    border-top-right-radius: $control-radius;
+    border-bottom-right-radius: $control-radius;
   }
 
   ::ng-deep .mat-button-toggle-checked {
@@ -758,9 +845,16 @@ $drafts-rail-bp: 75rem;
     flex-wrap: wrap;
   }
 
+  // No overflow here: it would become the sticky headers' scrollport and break them.
   &__table-wrap {
     border-top: 1px solid #f3f4f6;
-    overflow-x: auto;
+  }
+
+  &__search-info {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    color: $text-muted;
   }
 
   &__empty {
@@ -1410,6 +1504,20 @@ $drafts-rail-bp: 75rem;
   .file-card__header-center,
   .file-card__header-right {
     justify-self: start;
+  }
+
+  .file-card__filters {
+    grid-template-columns: 1fr;
+  }
+
+  .file-card__search,
+  .file-card__filters-summary {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .file-card__search {
+    width: 100%;
   }
 }
 

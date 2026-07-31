@@ -75,6 +75,9 @@ interface FieldGroupConfig {
   nameColumnLabel: string;
 }
 
+const ALL_FIELD_TYPES: readonly FieldType[] = ['tenant', 'parent'];
+const ALL_BUCKET_KEYS: readonly BucketKey[] = ['new', 'flagged', 'suggested', 'excluded'];
+
 type BulkActionType = 'apply-all' | 'accept-as-is' | 'standardise';
 
 interface PendingBulkAction {
@@ -156,6 +159,8 @@ export class ValidationComponent implements OnInit, OnDestroy {
   activeFieldTabByFile = new Map<number, FieldType>();
   /** Page index/size per (fileIndex, fieldType, bucketKey). Not persisted to drafts. */
   bucketPageState = new Map<string, { pageIndex: number; pageSize: number }>();
+  /** Free-text filter per file card. View-only: bulk actions ignore it. */
+  searchTermByFile = new Map<number, string>();
   corrections = new Map<string, StoredCorrectionRecord>();
   downloadProgressByFile = new Map<number, DownloadChecklistState>();
   private draftSaveState = new Map<number, DraftSaveStatus>();
@@ -275,6 +280,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     this.expandedSections = new Set<string>();
     this.activeFieldTabByFile = new Map<number, FieldType>();
     this.bucketPageState = new Map<string, { pageIndex: number; pageSize: number }>();
+    this.searchTermByFile = new Map<number, string>();
     this.corrections = new Map<string, StoredCorrectionRecord>();
     this.downloadProgressByFile = new Map<number, DownloadChecklistState>();
     this.draftSaveState.clear();
@@ -534,7 +540,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
       return cached;
     }
 
-    const all = this.rowsForDisplayBucket(fileIndex, fieldType, key);
+    const all = this.rowsForSearchedDisplayBucket(fileIndex, fieldType, key);
     const start = pageIndex * pageSize;
     const rows = all.slice(start, start + pageSize);
     this.rowsForBucketCache.set(cacheKey, rows);
@@ -552,6 +558,42 @@ export class ValidationComponent implements OnInit, OnDestroy {
         this.rowsForBucketCache.delete(key);
       }
     }
+  }
+
+  private invalidateSearchedSliceCache(
+    fileIndex: number,
+    fieldType: FieldType,
+    bucket: BucketKey
+  ): void {
+    const prefix = `searched|${fileIndex}|${fieldType}|${bucket}|`;
+    for (const key of Array.from(this.rowsForBucketCache.keys())) {
+      if (key.startsWith(prefix)) {
+        this.rowsForBucketCache.delete(key);
+      }
+    }
+  }
+
+  searchTermFor(fileIndex: number): string {
+    return this.searchTermByFile.get(fileIndex) ?? '';
+  }
+
+  onSearchTermChange(fileIndex: number, term: string): void {
+    const terms = new Map(this.searchTermByFile);
+    terms.set(fileIndex, term ?? '');
+    this.searchTermByFile = terms;
+
+    const pages = new Map(this.bucketPageState);
+    for (const fieldType of ALL_FIELD_TYPES) {
+      for (const bucket of ALL_BUCKET_KEYS) {
+        this.invalidatePagedSliceCache(fileIndex, fieldType, bucket);
+        this.invalidateSearchedSliceCache(fileIndex, fieldType, bucket);
+        pages.set(this.pageStateKey(fileIndex, fieldType, bucket), {
+          pageIndex: 0,
+          pageSize: this.pageSizeFor(fileIndex, fieldType, bucket)
+        });
+      }
+    }
+    this.bucketPageState = pages;
   }
 
   rowsForBucket(fileIndex: number, fieldType: FieldType, bucket: BucketKey): ValidationRow[] {
@@ -607,6 +649,59 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
     this.rowsForBucketCache.set(cacheKey, rows);
     return rows;
+  }
+
+  /**
+   * Display bucket narrowed by the card's search term. View-only: bulk actions,
+   * counts and the download payload must keep calling rowsForDisplayBucket.
+   */
+  rowsForSearchedDisplayBucket(
+    fileIndex: number,
+    fieldType: FieldType,
+    key: BucketKey
+  ): ValidationRow[] {
+    const all = this.rowsForDisplayBucket(fileIndex, fieldType, key);
+    const term = this.searchTermFor(fileIndex).trim().toLowerCase();
+    if (!term) {
+      return all;
+    }
+
+    const cacheKey = `searched|${fileIndex}|${fieldType}|${key}|${term}`;
+    const cached = this.rowsForBucketCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const rows = all.filter(row => this.matchesSearch(row, fieldType, term));
+    this.rowsForBucketCache.set(cacheKey, rows);
+    return rows;
+  }
+
+  /** Matching rows across every display bucket. Mirrors fieldGroupRowCount, search-aware. */
+  searchedFieldGroupRowCount(fileIndex: number, fieldType: FieldType): number {
+    return this.displayBuckets.reduce(
+      (sum, bucket) =>
+        sum + this.rowsForSearchedDisplayBucket(fileIndex, fieldType, bucket.key).length,
+      0
+    );
+  }
+
+  private matchesSearch(row: ValidationRow, fieldType: FieldType, term: string): boolean {
+    const needle = (term ?? '').trim().toLowerCase();
+    if (!needle) {
+      return true;
+    }
+
+    if ((row?.tenantName ?? '').toLowerCase().includes(needle)) {
+      return true;
+    }
+
+    if (fieldType === 'tenant') {
+      return ((row as ValidationResult)?.unitId ?? '').toLowerCase().includes(needle);
+    }
+
+    const appliesTo = (row as ParentValidationResult)?.appliesTo ?? [];
+    return appliesTo.some(item => (item?.unit ?? '').toLowerCase().includes(needle));
   }
 
   private clearRowsForBucketCache(): void {

@@ -175,6 +175,35 @@
         </div>
 
         <div class="file-card__body" *ngIf="isFileExpanded(fileIndex)">
+          <div class="file-card__filters">
+            <div class="file-card__search">
+              <mat-icon class="file-card__search-icon">search</mat-icon>
+              <input
+                type="text"
+                class="file-card__search-input"
+                placeholder="Search unit or tenant name"
+                aria-label="Search unit or tenant name"
+                [ngModel]="searchTermFor(fileIndex)"
+                (ngModelChange)="onSearchTermChange(fileIndex, $event)"
+              >
+              <button
+                type="button"
+                class="file-card__search-clear"
+                *ngIf="searchTermFor(fileIndex)"
+                aria-label="Clear search"
+                (click)="onSearchTermChange(fileIndex, '')"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+            <span class="file-card__filters-summary" *ngIf="searchTermFor(fileIndex)">
+              Showing
+              {{ searchedFieldGroupRowCount(fileIndex, activeFieldType(fileIndex)) }}
+              of {{ fieldGroupRowCount(fileIndex, activeFieldType(fileIndex)) }} rows
+              — bulk actions still apply to all
+              {{ fieldGroupRowCount(fileIndex, activeFieldType(fileIndex)) }}
+            </span>
+          </div>
           <div class="file-card__scroll">
           <ng-container
             *ngTemplateOutlet="fieldBucketsTpl; context: { fileIndex: fileIndex, fieldGroup: fieldGroupConfig(activeFieldType(fileIndex)) }"
@@ -259,6 +288,11 @@
                     class="bucket__table-wrap"
                     *ngIf="isSectionExpanded(fileIndex, fieldGroup.type, bucket.key)"
                   >
+                    <p class="bucket__search-info" *ngIf="searchTermFor(fileIndex)">
+                      {{ rowsForSearchedDisplayBucket(fileIndex, fieldGroup.type, bucket.key).length }}
+                      of {{ rowsForDisplayBucket(fileIndex, fieldGroup.type, bucket.key).length }}
+                      in this group match
+                    </p>
                     <app-validation-result-table
                       [fieldType]="fieldGroup.type"
                       [bucket]="bucket.key"
@@ -274,7 +308,7 @@
                     <mat-paginator
                       *ngIf="shouldShowPaginator(fileIndex, fieldGroup.type, bucket.key)"
                       class="bucket-paginator"
-                      [length]="bucketCount(fileIndex, fieldGroup.type, bucket.key)"
+                      [length]="rowsForSearchedDisplayBucket(fileIndex, fieldGroup.type, bucket.key).length"
                       [pageIndex]="pageIndexFor(fileIndex, fieldGroup.type, bucket.key)"
                       [pageSize]="pageSizeFor(fileIndex, fieldGroup.type, bucket.key)"
                       [pageSizeOptions]="pageSizeOptions"
