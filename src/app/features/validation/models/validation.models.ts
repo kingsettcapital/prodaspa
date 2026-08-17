@@ -1,6 +1,6 @@
 export type ClassifyStatus = 'correct' | 'suggested' | 'flagged' | 'new';
 export type FrontendStatus = 'excluded' | 'suggested' | 'flagged' | 'new';
-export type MatchSource = 'MasterList' | 'Normalisation' | 'AcceptedAsIs' | 'AutoAligned' | null;
+export type MatchSource = 'MasterList' | 'Normalisation' | 'NormalisedMatch' | 'AcceptedAsIs' | 'AutoAligned' | null;
 export type CorrectionChangeType = 'AcceptedSuggestion' | 'ManualOverride' | 'AcceptedAsIs';
 
 export interface ValidationResult {

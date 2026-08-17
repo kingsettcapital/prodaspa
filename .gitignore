@@ -40,3 +40,7 @@ testem.log
 # System files
 .DS_Store
 Thumbs.db
+
+# Local audit / planning notes
+/PARENT_MAPPING_PHASE0_CURSOR_AUDIT.md
+/PARENT_MAPPING_PHASE1_IMPLEMENTATION_PLAN.md
