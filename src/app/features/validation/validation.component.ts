@@ -146,7 +146,6 @@ export class ValidationComponent implements OnInit, OnDestroy {
   private readonly downloadGeneration = new Map<number, number>();
 
   selectedFiles: File[] = [];
-  asOfDate: string = this.todayLocalIso();
   batchResults: BatchValidationResult[] = [];
   isLoading = false;
   errorMessage = '';
@@ -219,14 +218,6 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   get canValidate(): boolean {
     return this.selectedFiles.length > 0 && !this.isLoading;
-  }
-
-  private todayLocalIso(): string {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
   }
 
   onFilesSelected(event: Event): void {
@@ -362,7 +353,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     this.errorMessage = '';
     this.resetResultsState();
 
-    this.validationApi.validateBatch(this.selectedFiles, this.asOfDate).subscribe({
+    this.validationApi.validateBatch(this.selectedFiles).subscribe({
       next: (results) => {
         this.batchResults = results;
         this.autoStageAlignments();
