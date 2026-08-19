@@ -7,14 +7,14 @@
       <th>{{ secondColumnHeader }}</th>
       <th>Confidence</th>
       <th>Reason</th>
-      <th *ngIf="showActionColumn || showAcceptedIndicator">Action</th>
+      <th *ngIf="showActionColumn">Action</th>
     </tr>
   </thead>
   <tbody>
     <tr
       *ngFor="let row of rows; trackBy: trackByRow"
       [ngClass]="rowBorderClass(row)"
-      [class.row-accepted]="isAccepted(row) && bucket !== 'excluded'"
+      [class.row-accepted]="isRowAcceptedStyled(row)"
     >
       <td>{{ unitDisplay(row) }}</td>
       <td>{{ buildingDisplay(row) }}</td>
@@ -22,18 +22,33 @@
       <td>{{ suggestedDisplay(row) }}</td>
       <td>{{ confidenceDisplay(row) }}</td>
       <td>{{ row.reason }}</td>
-      <td *ngIf="showActionColumn || showAcceptedIndicator" class="action-cell">
+      <td *ngIf="showActionColumn" class="action-cell">
         <div class="action-cell__inner" (click)="onActionClick($event)">
-          <ng-container *ngIf="isAccepted(row); else actionPending">
-            <span class="action-cell__accepted" title="Accepted correction">
-              ✓ Corrected: {{ correctionText(row) }}
+          <ng-container *ngIf="bucket === 'excluded'">
+            <span
+              [class.action-cell__accepted]="isManuallyOverridden(row)"
+              [class.action-cell__exact]="!isManuallyOverridden(row)"
+            >
+              {{ excludedActionLabel(row) }}
             </span>
-            <button type="button" class="action-cell__undo" (click)="clear.emit(row)">
-              Undo
+            <button
+              type="button"
+              class="action-cell__override-btn"
+              (click)="onOverrideClick($event, row)"
+            >
+              {{ overrideTriggerLabel(row) }}
             </button>
           </ng-container>
-          <ng-template #actionPending>
-            <ng-container *ngIf="bucket !== 'excluded'">
+          <ng-container *ngIf="bucket !== 'excluded'">
+            <ng-container *ngIf="isAccepted(row); else actionPending">
+              <span class="action-cell__accepted" title="Accepted correction">
+                ✓ Corrected: {{ correctionText(row) }}
+              </span>
+              <button type="button" class="action-cell__undo" (click)="clear.emit(row)">
+                Undo
+              </button>
+            </ng-container>
+            <ng-template #actionPending>
               <button
                 *ngIf="showAcceptTick(row)"
                 type="button"
@@ -51,15 +66,8 @@
               >
                 {{ overrideTriggerLabel(row) }}
               </button>
-            </ng-container>
-            <span
-              *ngIf="bucket === 'excluded'"
-              class="action-cell__exact"
-              title="Tenant name already matches the master list"
-            >
-              ✓ Exact match
-            </span>
-          </ng-template>
+            </ng-template>
+          </ng-container>
         </div>
       </td>
     </tr>

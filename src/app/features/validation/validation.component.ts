@@ -178,6 +178,8 @@ export class ValidationComponent implements OnInit, OnDestroy {
   private correctionsVersion = 0;
   private readonly correctionMapCache = new Map<string, Map<string, string>>();
   private readonly correctionMapCacheVersion = new Map<string, number>();
+  private readonly changeTypeMapCache = new Map<string, Map<string, CorrectionChangeType>>();
+  private readonly changeTypeMapCacheVersion = new Map<string, number>();
   private readonly acceptedKeysCache = new Map<string, Set<string>>();
   private readonly acceptedKeysCacheVersion = new Map<string, number>();
   private readonly rowsForBucketCache = new Map<string, ValidationRow[]>();
@@ -758,6 +760,28 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return map;
   }
 
+  tableChangeTypeMap(fileIndex: number, fieldType: FieldType): Map<string, CorrectionChangeType> {
+    const cacheKey = this.tableCacheKey(fileIndex, fieldType);
+    const cachedVersion = this.changeTypeMapCacheVersion.get(cacheKey);
+    if (cachedVersion === this.correctionsVersion) {
+      const cached = this.changeTypeMapCache.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
+    const prefix = this.tableKeyPrefix(fileIndex, fieldType);
+    const map = new Map<string, CorrectionChangeType>();
+    this.corrections.forEach((record, key) => {
+      if (key.startsWith(prefix)) {
+        map.set(key.slice(prefix.length), record.changeType);
+      }
+    });
+    this.changeTypeMapCache.set(cacheKey, map);
+    this.changeTypeMapCacheVersion.set(cacheKey, this.correctionsVersion);
+    return map;
+  }
+
   private tableCacheKey(fileIndex: number, fieldType: FieldType): string {
     return `${fileIndex}|${fieldType}`;
   }
@@ -776,7 +800,6 @@ export class ValidationComponent implements OnInit, OnDestroy {
     fieldType: FieldType,
     request: OverridePopoverRequest
   ): void {
-    const correctionMap = this.tableCorrectionMap(fileIndex, fieldType);
     this.pendingOverride = {
       fileIndex,
       fieldType,
@@ -784,7 +807,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
       top: request.top,
       left: request.left,
       originalName: request.row.tenantName,
-      initialValue: correctionMap.get(this.tableRowKey(fieldType, request.row)) ?? '',
+      initialValue: this.effectiveCorrectionValue(fileIndex, fieldType, request.row),
       placeholder: request.placeholder
     };
   }
@@ -1070,16 +1093,34 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   setManualCorrection(fileIndex: number, fieldType: FieldType, row: ValidationRow, value: string): void {
-    if (value?.trim()) {
-      this.setCorrection(fileIndex, fieldType, row, {
-        correctedName: value.trim(),
-        changeType: 'ManualOverride',
-        confidence: null,
-        matchSource: null
-      });
-    } else {
-      this.clearCorrection(fileIndex, fieldType, row);
+    if (value === this.effectiveCorrectionValue(fileIndex, fieldType, row)) {
+      return;
     }
+    if (!value?.trim()) {
+      return;
+    }
+    this.setCorrection(fileIndex, fieldType, row, {
+      correctedName: value.trim(),
+      changeType: 'ManualOverride',
+      confidence: null,
+      matchSource: 'ManualOverride'
+    });
+  }
+
+  private effectiveCorrectionValue(
+    fileIndex: number,
+    fieldType: FieldType,
+    row: ValidationRow
+  ): string {
+    const stored = this.corrections.get(this.correctionKey(fileIndex, fieldType, row));
+    return stored ? stored.correctedName : this.sourceNameForField(fieldType, row);
+  }
+
+  private sourceNameForField(fieldType: FieldType, row: ValidationRow): string {
+    if (fieldType === 'parent') {
+      return (row as ParentValidationResult).tenantName;
+    }
+    return row.tenantName;
   }
 
   clearCorrection(fileIndex: number, fieldType: FieldType, row: ValidationRow): void {
@@ -1620,6 +1661,17 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return this.drafts.filter(d => d.status === 'InProgress');
   }
 
+  private matchSourceForResume(
+    changeType: CorrectionChangeType,
+    matchSource: MatchSource
+  ): MatchSource {
+    const blank = matchSource == null || String(matchSource).trim() === '';
+    if (changeType === 'ManualOverride' && blank) {
+      return 'ManualOverride';
+    }
+    return matchSource;
+  }
+
   resumeDraft(fileId: string): void {
     if (this.batchResults.length > 0 || this.corrections.size > 0) {
       const confirmed = window.confirm(
@@ -1668,7 +1720,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
             correctedName: d.correctedName,
             changeType: d.changeType,
             confidence: d.confidence,
-            matchSource: d.matchSource
+            matchSource: this.matchSourceForResume(d.changeType, d.matchSource)
           });
         }
 
@@ -1683,7 +1735,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
             correctedName: d.correctedName,
             changeType: d.changeType,
             confidence: d.confidence,
-            matchSource: d.matchSource
+            matchSource: this.matchSourceForResume(d.changeType, d.matchSource)
           });
         }
         this.suppressAutosaveDirty = false;

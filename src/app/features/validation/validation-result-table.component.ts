@@ -1,5 +1,6 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import {
+  CorrectionChangeType,
   ParentAppliesToItem,
   ParentValidationResult,
   ValidationResult,
@@ -29,6 +30,7 @@ export class ValidationResultTableComponent {
   @Input() rows: ValidationRow[] = [];
   @Input() acceptedKeys: Set<string> = new Set();
   @Input() correctionByKey: Map<string, string> = new Map();
+  @Input() changeTypeByKey: Map<string, CorrectionChangeType> = new Map();
 
   @Output() accept = new EventEmitter<ValidationRow>();
   @Output() manual = new EventEmitter<{ row: ValidationRow; value: string }>();
@@ -36,13 +38,6 @@ export class ValidationResultTableComponent {
   @Output() overrideRequest = new EventEmitter<OverridePopoverRequest>();
 
   get showActionColumn(): boolean {
-    return this.bucket !== 'excluded';
-  }
-
-  get showAcceptedIndicator(): boolean {
-    // accepted indicator (✓ Corrected + Undo) renders in every bucket,
-    // including Correct; only the pending accept/override controls are
-    // bucket-gated (see template).
     return true;
   }
 
@@ -75,6 +70,24 @@ export class ValidationResultTableComponent {
 
   isAccepted(row: ValidationRow): boolean {
     return this.acceptedKeys.has(this.rowKey(row));
+  }
+
+  isManuallyOverridden(row: ValidationRow): boolean {
+    return this.changeTypeByKey.get(this.rowKey(row)) === 'ManualOverride';
+  }
+
+  isRowAcceptedStyled(row: ValidationRow): boolean {
+    return this.isManuallyOverridden(row) || (this.isAccepted(row) && this.bucket !== 'excluded');
+  }
+
+  excludedActionLabel(row: ValidationRow): string {
+    if (this.isManuallyOverridden(row)) {
+      return `✓ Overridden: ${this.correctionText(row)}`;
+    }
+    if (this.isAccepted(row)) {
+      return `✓ Corrected: ${this.correctionText(row)}`;
+    }
+    return '✓ Exact match';
   }
 
   correctionText(row: ValidationRow): string {
@@ -149,6 +162,9 @@ export class ValidationResultTableComponent {
   }
 
   overrideTriggerLabel(row: ValidationRow): string {
+    if (this.bucket === 'excluded') {
+      return 'Override';
+    }
     return this.showAcceptTick(row) ? 'Or type override' : 'Correct name';
   }
 

@@ -295,6 +295,7 @@
                       [rows]="rowsForPagedDisplayBucket(fileIndex, fieldGroup.type, bucket.key)"
                       [acceptedKeys]="tableAcceptedKeys(fileIndex, fieldGroup.type)"
                       [correctionByKey]="tableCorrectionMap(fileIndex, fieldGroup.type)"
+                      [changeTypeByKey]="tableChangeTypeMap(fileIndex, fieldGroup.type)"
                       (accept)="onTableAccept(fileIndex, fieldGroup.type, $event)"
                       (overrideRequest)="onTableOverrideRequest(fileIndex, fieldGroup.type, $event)"
                       (manual)="onTableManual(fileIndex, fieldGroup.type, $event)"
