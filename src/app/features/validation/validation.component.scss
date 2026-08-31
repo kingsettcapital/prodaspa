@@ -416,6 +416,7 @@ $drafts-rail-bp: 75rem;
   &__file-item {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.375rem;
     min-width: 0;
   }
@@ -435,6 +436,56 @@ $drafts-rail-bp: 75rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  &__file-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    margin-left: auto;
+    border: none;
+    border-radius: 0.375rem;
+    background: transparent;
+    color: #9ca3af;
+    cursor: pointer;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s, background-color 0.15s, color 0.15s;
+
+    &:hover {
+      color: #dc2626;
+      background: rgba(220, 38, 38, 0.08);
+    }
+
+    &:focus-visible {
+      opacity: 1;
+      outline: 2px solid $upload-drag-border;
+      outline-offset: 1px;
+    }
+
+    &[disabled] {
+      cursor: default;
+    }
+  }
+
+  &__file-item:hover &__file-remove,
+  &__file-remove:focus-visible {
+    opacity: 1;
+  }
+
+  &__file-remove-icon {
+    width: 1.125rem;
+    height: 1.125rem;
+    font-size: 1.125rem;
+  }
+
+  @media (hover: none) {
+    &__file-remove {
+      opacity: 1;
+    }
   }
 
   &__btn {

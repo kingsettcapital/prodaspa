@@ -257,7 +257,16 @@ export class ValidationComponent implements OnInit, OnDestroy {
     }
 
     this.errorMessage = '';
-    this.selectedFiles = files;
+    this.selectedFiles = [...this.selectedFiles, ...files];
+    this.resetResultsState();
+  }
+
+  removeSelectedFile(index: number, fileInputEl?: HTMLInputElement): void {
+    this.selectedFiles = this.selectedFiles.filter((_, i) => i !== index);
+    this.errorMessage = '';
+    if (this.selectedFiles.length === 0 && fileInputEl) {
+      fileInputEl.value = '';
+    }
     this.resetResultsState();
   }
 

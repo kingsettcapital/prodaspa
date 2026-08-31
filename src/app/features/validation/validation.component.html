@@ -41,9 +41,19 @@
         <div class="upload-bar__body" *ngIf="selectedFiles.length > 0; else uploadEmpty">
           <p class="upload-bar__title">{{ selectedFiles.length }} file{{ selectedFiles.length === 1 ? '' : 's' }} selected</p>
           <ul class="upload-bar__file-list">
-            <li class="upload-bar__file-item" *ngFor="let file of selectedFiles">
+            <li class="upload-bar__file-item" *ngFor="let file of selectedFiles; let i = index">
               <mat-icon class="upload-bar__file-check">check_circle</mat-icon>
               <span class="upload-bar__file-name">{{ file.name }}</span>
+              <button
+                type="button"
+                class="upload-bar__file-remove"
+                [attr.aria-label]="'Remove ' + file.name"
+                title="Remove file"
+                [disabled]="isLoading"
+                (click)="removeSelectedFile(i, fileInput)"
+              >
+                <mat-icon class="upload-bar__file-remove-icon">delete_outline</mat-icon>
+              </button>
             </li>
           </ul>
         </div>
