@@ -497,6 +497,18 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return `${fileIndex}|${fieldType}|${bucket}`;
   }
 
+  /**
+   * Resolves a display-position fileIndex to the stable fileId for that file.
+   * fileIndex is a positional handle only — it shifts when files are added or
+   * removed. All session state (corrections, autosave, caches) is being
+   * migrated to key off the returned fileId instead. Returns null when the
+   * index does not resolve, matching the existing `if (!file || !batchResult)`
+   * guard convention used by saveDraft / downloadFile / flushAutosave.
+   */
+  private resolveFileId(fileIndex: number): string | null {
+    return this.batchResults[fileIndex]?.fileId ?? null;
+  }
+
   pageIndexFor(fileIndex: number, fieldType: FieldType, bucket: BucketKey): number {
     return this.bucketPageState.get(this.pageStateKey(fileIndex, fieldType, bucket))?.pageIndex ?? 0;
   }
