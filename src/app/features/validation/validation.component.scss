@@ -1271,6 +1271,11 @@ $drafts-rail-bp: 75rem;
   cursor: not-allowed;
 }
 
+.file-clear__btn--all {
+  margin-top: 0.75rem;
+  align-self: flex-start;
+}
+
 .file-save__status {
   margin: 0.5rem 0 0;
   min-height: 1.25rem;

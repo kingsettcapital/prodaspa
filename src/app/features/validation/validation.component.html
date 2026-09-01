@@ -133,6 +133,17 @@
       <span>{{ isLoading ? 'Validating...' : 'Validate All Files' }}</span>
     </button>
 
+    <button
+      type="button"
+      class="file-clear__btn file-clear__btn--all"
+      *ngIf="batchResults.length > 0"
+      [disabled]="isLoading"
+      (click)="clearBatch(fileInput)"
+    >
+      <mat-icon class="file-clear__icon">close</mat-icon>
+      Clear All Files
+    </button>
+
     <div class="error-banner" *ngIf="errorMessage">
       <mat-icon class="error-banner__icon">warning</mat-icon>
       <span>{{ errorMessage }}</span>
@@ -365,14 +376,6 @@
               >
                 <mat-icon class="file-download__icon">download</mat-icon>
                 Download Corrected File
-              </button>
-              <button
-                type="button"
-                class="file-clear__btn"
-                (click)="clearBatch(fileInput)"
-              >
-                <mat-icon class="file-clear__icon">close</mat-icon>
-                Clear File
               </button>
             </div>
 
