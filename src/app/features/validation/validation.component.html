@@ -133,17 +133,6 @@
       <span>{{ isLoading ? 'Validating...' : 'Validate All Files' }}</span>
     </button>
 
-    <button
-      type="button"
-      class="file-clear__btn file-clear__btn--all"
-      *ngIf="batchResults.length > 0"
-      [disabled]="isLoading"
-      (click)="clearBatch(fileInput)"
-    >
-      <mat-icon class="file-clear__icon">close</mat-icon>
-      Clear All Files
-    </button>
-
     <div class="error-banner" *ngIf="errorMessage">
       <mat-icon class="error-banner__icon">warning</mat-icon>
       <span>{{ errorMessage }}</span>
@@ -187,6 +176,16 @@
             <span class="file-card__corrections-badge" *ngIf="acceptedCount(fileIndex) > 0">
               {{ acceptedCount(fileIndex) }} corrections ready
             </span>
+            <button
+              type="button"
+              class="file-card__remove"
+              [attr.aria-label]="'Remove ' + result.fileName"
+              title="Remove file"
+              [disabled]="isLoading"
+              (click)="$event.stopPropagation(); removeValidatedFile(fileIndex, fileInput)"
+            >
+              <mat-icon class="file-card__remove-icon">delete_outline</mat-icon>
+            </button>
           </div>
         </div>
 
@@ -342,7 +341,7 @@
           <div class="file-download" (click)="$event.stopPropagation()">
             <div
               class="autosave-warning"
-              *ngIf="autosaveWarning.has(fileIndex)"
+              *ngIf="isAutosaveWarning(fileIndex)"
               role="status"
             >
               <span class="autosave-warning__text">
@@ -376,6 +375,15 @@
               >
                 <mat-icon class="file-download__icon">download</mat-icon>
                 Download Corrected File
+              </button>
+              <button
+                type="button"
+                class="file-clear__btn"
+                [disabled]="isLoading"
+                (click)="clearBatch(fileInput)"
+              >
+                <mat-icon class="file-clear__icon">close</mat-icon>
+                Clear All Files
               </button>
             </div>
 
