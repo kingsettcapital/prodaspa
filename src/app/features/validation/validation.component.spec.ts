@@ -130,7 +130,7 @@ describe('ValidationComponent positional fileIndex keying', () => {
     expect(payload.fileId).toBe('file-bbb');
     expect(payload.tenantCorrections.length).toBe(1);
     expect(payload.tenantCorrections[0].originalName)
-      .withContext('expected Tenant B under file-bbb; positional 0| key still holds Tenant A')
+      .withContext('download payload corrections must follow the file fileId, not its array position')
       .toBe('Tenant B');
     expect(payload.tenantCorrections[0].correctedName).toBe('Corrected B');
   });
@@ -145,7 +145,7 @@ describe('ValidationComponent positional fileIndex keying', () => {
     const payload = (component as any).buildDownloadPayload(0);
     expect(payload.fileId).toBe('file-bbb');
     expect(payload.copyTenantToParent)
-      .withContext('expected copy flag to follow file B; Set still keyed as 1')
+      .withContext('parent-copy confirmation must follow the file fileId, not its array position')
       .toBe(true);
   });
 
@@ -371,6 +371,21 @@ describe('ValidationComponent positional fileIndex keying', () => {
     expect((component as any).searchTermByFile.size).toBe(0);
     expect(component.expandedFiles.size).toBe(0);
     expect((component as any).parentCopyConfirmed.size).toBe(0);
+  });
+
+  it('onFilesSelected resets the native input so the same file can be re-picked', () => {
+    component.selectedFiles = [];
+    const input: { files: File[]; value: string } = {
+      files: [new File([], 'A.xlsx')],
+      value: 'C:\\fakepath\\A.xlsx'
+    };
+
+    component.onFilesSelected({ target: input } as unknown as Event);
+
+    expect(component.selectedFiles.length).toBe(1);
+    expect(input.value)
+      .withContext('file input must be reset so re-picking the same file fires change')
+      .toBe('');
   });
 });
 

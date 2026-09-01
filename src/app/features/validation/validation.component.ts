@@ -227,6 +227,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     const files = input.files;
     if (files && files.length > 0) {
       this.setFiles(Array.from(files));
+      input.value = '';
     }
   }
 
