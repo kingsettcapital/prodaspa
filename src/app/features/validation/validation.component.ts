@@ -438,15 +438,20 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return this.batchResults[fileIndex]?.parentResponse != null;
   }
 
-  private parentCopyConfirmed = new Set<number>();
+  private parentCopyConfirmed = new Set<string>();
 
   isParentCopyPending(fileIndex: number): boolean {
     const pr = this.batchResults[fileIndex]?.parentResponse;
-    return !!pr?.isCopiedFromTenant && !this.parentCopyConfirmed.has(fileIndex);
+    const fileId = this.resolveFileId(fileIndex);
+    return !!pr?.isCopiedFromTenant && !(fileId != null && this.parentCopyConfirmed.has(fileId));
   }
 
   confirmParentCopy(fileIndex: number): void {
-    this.parentCopyConfirmed.add(fileIndex);
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+    this.parentCopyConfirmed.add(fileId);
   }
 
   cancelParentCopy(fileIndex: number, event?: Event): void {
@@ -727,7 +732,11 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   acceptedCount(fileIndex: number): number {
-    const prefix = `${fileIndex}|`;
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return 0;
+    }
+    const prefix = `${fileId}|`;
     let count = 0;
     this.corrections.forEach((_, key) => {
       if (key.startsWith(prefix)) {
@@ -855,7 +864,11 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   private tableKeyPrefix(fileIndex: number, fieldType: FieldType): string {
-    return `${fileIndex}|${fieldType}|`;
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return `__unresolved:${fileIndex}|${fieldType}|`;
+    }
+    return `${fileId}|${fieldType}|`;
   }
 
   hasSuggestion(row: ValidationRow): boolean {
@@ -1156,7 +1169,11 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   private correctionKey(fileIndex: number, fieldType: FieldType, row: ValidationRow): string {
     const scope = fieldType === 'tenant' ? 'tenant' : 'parent';
-    return `${fileIndex}|${scope}|${row.rowIndex}`;
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return `__unresolved:${fileIndex}|${scope}|${row.rowIndex}`;
+    }
+    return `${fileId}|${scope}|${row.rowIndex}`;
   }
 
   private setCorrection(
@@ -1352,8 +1369,8 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return [];
   }
 
-  private correctionsForFile(fileIndex: number): StoredCorrectionRecord[] {
-    const prefix = `${fileIndex}|`;
+  private correctionsMatchingFileId(fileId: string): StoredCorrectionRecord[] {
+    const prefix = `${fileId}|`;
     const list: StoredCorrectionRecord[] = [];
     this.corrections.forEach((record, key) => {
       if (key.startsWith(prefix)) {
@@ -1363,8 +1380,18 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return list;
   }
 
+  private correctionsForFile(fileIndex: number): StoredCorrectionRecord[] {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return [];
+    }
+    return this.correctionsMatchingFileId(fileId);
+  }
+
   private buildDownloadPayload(fileIndex: number): DownloadCorrectionsPayload {
-    const tenantCorrections = this.correctionsForFile(fileIndex)
+    const fileId = this.resolveFileId(fileIndex);
+    const records = fileId == null ? [] : this.correctionsMatchingFileId(fileId);
+    const tenantCorrections = records
       .filter(c => c.fieldType === 'Tenant')
       .flatMap(c => this.correctionTargets(c).map(target => ({
         rowIndex: c.rowIndex,
@@ -1376,7 +1403,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
         confidence: c.confidence,
         matchSource: c.matchSource
       })));
-    const parentCorrections = this.correctionsForFile(fileIndex)
+    const parentCorrections = records
       .filter(c => c.fieldType === 'Parent')
       .map(c => ({
         rowIndex: c.rowIndex,
@@ -1389,9 +1416,9 @@ export class ValidationComponent implements OnInit, OnDestroy {
       }));
     const parentResponse = this.batchResults[fileIndex]?.parentResponse;
     const copyTenantToParent =
-      !!parentResponse?.isCopiedFromTenant && this.parentCopyConfirmed.has(fileIndex);
+      !!parentResponse?.isCopiedFromTenant && fileId != null && this.parentCopyConfirmed.has(fileId);
     return {
-      fileId: this.batchResults[fileIndex].fileId,
+      fileId: fileId ?? '',
       tenantCorrections,
       parentCorrections,
       copyTenantToParent
