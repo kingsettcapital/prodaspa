@@ -1,8 +1,10 @@
-import { fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatButtonToggleChange } from '@angular/material/button-toggle';
 import { PageEvent } from '@angular/material/paginator';
 import { of } from 'rxjs';
 import { NotificationService } from 'src/app/core/services/notification.service';
+import { SharedModule } from 'src/app/shared/shared.module';
 import {
   BatchValidationResult,
   ParentValidationResponse,
@@ -10,6 +12,8 @@ import {
   ValidationResult
 } from './models/validation.models';
 import { ValidationApiService } from './services/validation-api.service';
+import { OverridePopoverPanelComponent } from './override-popover-panel.component';
+import { BucketKey, ValidationResultTableComponent } from './validation-result-table.component';
 import { ValidationComponent } from './validation.component';
 
 function makeRow(tenantName: string, suggestion: string): ValidationResult {
@@ -481,6 +485,294 @@ describe('ValidationComponent positional fileIndex keying', () => {
     expect(component.noticeReason(noticed as ParentValidationResult))
       .withContext('notice reason must be Ambiguous name')
       .toBe('Ambiguous name');
+  });
+});
+
+function apiAndNotifyStubs(): {
+  apiStub: ValidationApiService;
+  notifyStub: NotificationService;
+} {
+  const apiStub = {
+    getDrafts: () => of([]),
+    saveDraft: () => of({ fileId: '', id: 0, status: 'ok' }),
+    updateDraftDecisions: () => of({ fileId: '', status: 'ok' }),
+    clearDraft: () => of({ fileId: '', status: 'ok' }),
+    validateBatch: () => of([])
+  } as unknown as ValidationApiService;
+
+  const notifyStub = {
+    success: () => undefined,
+    error: () => undefined,
+    info: () => undefined
+  } as unknown as NotificationService;
+
+  return { apiStub, notifyStub };
+}
+
+function characterizationRow(
+  rowIndex: number,
+  tenantName: string,
+  status: string,
+  extras: Partial<ValidationResult> = {}
+): ValidationResult {
+  return {
+    rowIndex,
+    propertyId: 'P-1',
+    unitId: `U-${rowIndex}`,
+    tenantName,
+    targetName: extras.suggestion ?? extras.suggestedName ?? '',
+    buildingName: 'Building 1',
+    leaseStart: '2024-01-01',
+    status: status as ValidationResult['status'],
+    classifyStatus: 'new',
+    suggestion: extras.suggestion ?? null,
+    matchSource: extras.matchSource ?? null,
+    suggestedName: extras.suggestedName ?? extras.suggestion ?? null,
+    confidence: extras.confidence ?? 0.9,
+    reason: extras.reason ?? status,
+    appliesTo: [{ building: 'Building 1', unit: `U-${rowIndex}` }],
+    ...extras
+  };
+}
+
+describe('ValidationComponent characterization (Phase 1c)', () => {
+  let component: ValidationComponent;
+  let fixture: ComponentFixture<ValidationComponent>;
+
+  beforeEach(async () => {
+    const { apiStub, notifyStub } = apiAndNotifyStubs();
+    await TestBed.configureTestingModule({
+      declarations: [
+        ValidationComponent,
+        ValidationResultTableComponent,
+        OverridePopoverPanelComponent
+      ],
+      imports: [SharedModule, NoopAnimationsModule],
+      providers: [
+        { provide: ValidationApiService, useValue: apiStub },
+        { provide: NotificationService, useValue: notifyStub }
+      ]
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(ValidationComponent);
+    component = fixture.componentInstance;
+    (component as any).suppressAutosaveDirty = true;
+    fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+    TestBed.resetTestingModule();
+  });
+
+  function seedTenantResults(rows: ValidationResult[]): void {
+    component.selectedFiles = [new File([], 'char.xlsx')];
+    component.batchResults = [
+      {
+        fileName: 'char.xlsx',
+        fileId: 'file-char',
+        historyId: 1,
+        response: {
+          total: rows.length,
+          excluded: rows.filter(r => r.status === 'excluded').length,
+          suggested: rows.filter(r => r.status === 'suggested').length,
+          flagged: rows.filter(r => r.status === 'flagged').length,
+          new: rows.filter(r => r.status === 'new').length,
+          results: rows
+        },
+        parentResponse: null
+      }
+    ];
+  }
+
+  function displayBucketKeys(): BucketKey[] {
+    return component.displayBuckets.map(b => b.key);
+  }
+
+  function namesInDisplayBuckets(): string[] {
+    return displayBucketKeys().flatMap(key =>
+      component.rowsForDisplayBucket(0, 'tenant', key).map(r => r.tenantName)
+    );
+  }
+
+  function sumDisplayBucketLengths(): number {
+    return displayBucketKeys().reduce(
+      (sum, key) => sum + component.rowsForDisplayBucket(0, 'tenant', key).length,
+      0
+    );
+  }
+
+  function expandFileAndDisplaySections(): void {
+    if (!component.isFileExpanded(0)) {
+      component.toggleFile(0);
+    }
+    for (const bucket of component.displayBuckets) {
+      if (!component.isSectionExpanded(0, 'tenant', bucket.key)) {
+        component.toggleSection(0, 'tenant', bucket.key);
+      }
+    }
+    fixture.detectChanges();
+  }
+
+  function stagedOriginalNames(): string[] {
+    return Array.from(
+      ((component as any).corrections as Map<string, { originalName: string }>).values()
+    ).map(c => c.originalName);
+  }
+
+  function clickBulk(type: 'apply-all' | 'accept-as-is' | 'standardise'): void {
+    component.requestBulkAction(type, 0, 'tenant', 'Tenant names', new Event('click'));
+    component.confirmBulkAction();
+  }
+
+  // This test documents a defect and is expected to be INVERTED in a later phase.
+  it('CHARACTERIZATION_unrecognisedStatus_isSilentlyDropped', () => {
+    const recognised = [
+      characterizationRow(1, 'Name New', 'new'),
+      characterizationRow(2, 'Name Suggested', 'suggested', { suggestion: 'Canonical Suggested' }),
+      characterizationRow(3, 'Name Flagged', 'flagged', {
+        suggestion: 'Canonical Flagged',
+        reason: 'Standardisation'
+      }),
+      characterizationRow(4, 'Name Excluded', 'excluded')
+    ];
+    const dropped = characterizationRow(99, 'Name Unrecognised', '__no_such_status__');
+    seedTenantResults([...recognised, dropped]);
+    expandFileAndDisplaySections();
+
+    const renderedNames = namesInDisplayBuckets();
+    expect(renderedNames)
+      .withContext('unrecognised status must appear in no display bucket the template binds')
+      .not.toContain('Name Unrecognised');
+    expect(fixture.nativeElement.textContent)
+      .withContext('unrecognised tenant name must not appear in the expanded template')
+      .not.toContain('Name Unrecognised');
+
+    for (const key of displayBucketKeys()) {
+      expect(component.bucketCount(0, 'tenant', key))
+        .withContext(`header count for ${key} must equal the display-bucket length`)
+        .toBe(component.rowsForDisplayBucket(0, 'tenant', key).length);
+    }
+    expect(namesInDisplayBuckets())
+      .withContext('header-backed display arrays must not include the unrecognised row')
+      .not.toContain('Name Unrecognised');
+
+    expect(sumDisplayBucketLengths())
+      .withContext('sum of rendered bucket lengths must be less than the response row count')
+      .toBeLessThan(component.batchResults[0].response.results.length);
+    expect(sumDisplayBucketLengths()).toBe(recognised.length);
+  });
+
+  it('CHARACTERIZATION_vacantRow_isOmittedFromDisplayAndCount', () => {
+    const visible = characterizationRow(1, 'Occupied New Co', 'new');
+    const vacantByName = characterizationRow(2, 'VACANT', 'new', { reason: 'New Tenant' });
+    const vacantByReason = characterizationRow(3, 'Blank Tenant Co', 'new', {
+      reason: 'blank / vacant'
+    });
+    seedTenantResults([visible, vacantByName, vacantByReason]);
+    expandFileAndDisplaySections();
+
+    const newNames = component.rowsForDisplayBucket(0, 'tenant', 'new').map(r => r.tenantName);
+    expect(newNames).toEqual(['Occupied New Co']);
+    expect(component.bucketCount(0, 'tenant', 'new')).toBe(1);
+    expect(fixture.nativeElement.textContent).toContain('Occupied New Co');
+    expect(fixture.nativeElement.textContent).not.toContain('VACANT');
+    expect(fixture.nativeElement.textContent).not.toContain('Blank Tenant Co');
+  });
+
+  it('CHARACTERIZATION_statusVocabulary_eachComparedStatusLandsInABucket', () => {
+    // Derived from live comparisons, not a believed list:
+    // rowsForBucket r.status === bucket for 'new'|'flagged'|'suggested'|'excluded'
+    // (validation.component.ts:844/848); display fold key === 'suggested' (876-879);
+    // isAcceptAsIsRow status?.toLowerCase() === 'new' (1113);
+    // template bucket.key === 'suggested'|'new' (html:275, 289).
+    const derivedStatusVocabulary = ['new', 'suggested', 'flagged', 'excluded'] as const;
+    const rows = [
+      characterizationRow(1, 'Vocab New', 'new'),
+      characterizationRow(2, 'Vocab Suggested', 'suggested', { suggestion: 'Canon Suggested' }),
+      characterizationRow(3, 'Vocab Flagged', 'flagged', {
+        suggestion: 'Canon Flagged',
+        reason: 'Standardisation'
+      }),
+      characterizationRow(4, 'Vocab Excluded', 'excluded')
+    ];
+    seedTenantResults(rows);
+
+    const landing: Record<string, string[]> = {};
+    for (const status of derivedStatusVocabulary) {
+      const name = rows.find(r => r.status === status)!.tenantName;
+      landing[status] = displayBucketKeys().filter(key =>
+        component.rowsForDisplayBucket(0, 'tenant', key).some(r => r.tenantName === name)
+      );
+      expect(landing[status].length)
+        .withContext(`${status} must land in at least one display bucket`)
+        .toBeGreaterThan(0);
+    }
+
+    expect(landing['new']).toEqual(['new']);
+    expect(landing['suggested']).toEqual(['suggested']);
+    expect(landing['flagged']).toEqual(['suggested']);
+    expect(landing['excluded']).toEqual(['excluded']);
+  });
+
+  it('CHARACTERIZATION_bulkActions_operateOnFullSetNotSearchFiltered', () => {
+    const alphaNew = characterizationRow(1, 'Alpha New Co', 'new');
+    const zetaNew = characterizationRow(2, 'Zeta New Co', 'new');
+    const alphaSuggested = characterizationRow(3, 'Alpha Suggested Co', 'suggested', {
+      suggestion: 'Alpha Suggested Canonical'
+    });
+    const zetaSuggested = characterizationRow(4, 'Zeta Suggested Co', 'suggested', {
+      suggestion: 'Zeta Suggested Canonical'
+    });
+    const alphaFlagged = characterizationRow(5, 'Alpha Flagged Co', 'flagged', {
+      suggestion: 'Alpha Flagged Canonical',
+      reason: 'Standardisation'
+    });
+    const zetaFlagged = characterizationRow(6, 'Zeta Flagged Co', 'flagged', {
+      suggestion: 'Zeta Flagged Canonical',
+      reason: 'Standardisation'
+    });
+    seedTenantResults([
+      alphaNew,
+      zetaNew,
+      alphaSuggested,
+      zetaSuggested,
+      alphaFlagged,
+      zetaFlagged
+    ]);
+
+    component.onSearchTermChange(0, 'Alpha');
+
+    const searchedSuggested = component
+      .rowsForSearchedDisplayBucket(0, 'tenant', 'suggested')
+      .map(r => r.tenantName);
+    const fullSuggested = component
+      .rowsForDisplayBucket(0, 'tenant', 'suggested')
+      .map(r => r.tenantName);
+    const searchedNew = component
+      .rowsForSearchedDisplayBucket(0, 'tenant', 'new')
+      .map(r => r.tenantName);
+    const fullNew = component.rowsForDisplayBucket(0, 'tenant', 'new').map(r => r.tenantName);
+
+    expect(searchedSuggested.length).toBeLessThan(fullSuggested.length);
+    expect(searchedNew.length).toBeLessThan(fullNew.length);
+    expect(searchedSuggested).not.toContain('Zeta Suggested Co');
+    expect(searchedNew).not.toContain('Zeta New Co');
+
+    clickBulk('apply-all');
+    clickBulk('accept-as-is');
+    clickBulk('standardise');
+
+    const staged = stagedOriginalNames();
+    expect(staged)
+      .withContext('apply-all reads rowsForDisplayBucket suggested, not the search slice')
+      .toContain('Zeta Suggested Co');
+    expect(staged)
+      .withContext('accept-as-is reads rowsForDisplayBucket new, not the search slice')
+      .toContain('Zeta New Co');
+    expect(staged)
+      .withContext('standardise reads rowsForBucket flagged, not the search slice')
+      .toContain('Zeta Flagged Co');
   });
 });
 
