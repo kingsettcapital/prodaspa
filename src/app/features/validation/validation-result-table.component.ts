@@ -3,8 +3,7 @@ import {
   CorrectionChangeType,
   ParentAppliesToItem,
   ParentValidationResult,
-  ValidationResult,
-  isIdentityBackfillRow
+  ValidationResult
 } from './models/validation.models';
 
 export type FieldType = 'tenant' | 'parent';
@@ -152,9 +151,8 @@ export class ValidationResultTableComponent {
   }
 
   isAcceptDisabled(row: ValidationRow): boolean {
-    if (isIdentityBackfillRow(row)) {
-      return !this.correctionText(row);
-    }
+    // Accept-as-is suppression for backfilled parent rows removed on Heather's instruction (2026-09).
+    // Server remains the authority via ValidationController.cs:1027-1033.
     if (!row.isAmbiguousMultiParty) {
       return false;
     }

@@ -15,8 +15,7 @@ import {
   ParentAppliesToItem,
   ParentValidationResult,
   ValidationHistory,
-  ValidationResult,
-  isIdentityBackfillRow
+  ValidationResult
 } from './models/validation.models';
 import {
   BucketKey,
@@ -1205,7 +1204,6 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return this.rowsForDisplayBucket(fileIndex, fieldType, 'new')
       .filter(row =>
         !row.isAmbiguousMultiParty
-        && !isIdentityBackfillRow(row)
         && !acceptedKeys.has(this.tableRowKey(fieldType, row)))
       .length;
   }
@@ -1220,9 +1218,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   noticeReason(row: ValidationRow): string {
-    return row.isAmbiguousMultiParty
-      ? 'Ambiguous name'
-      : 'Parent filled from tenant name';
+    return 'Ambiguous name';
   }
 
   noticeUnit(row: ValidationRow): string {
@@ -1328,23 +1324,22 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   private executeAcceptAllAsIs(fileIndex: number, fieldType: FieldType): void {
+    // Backfill identity exclusion removed on Heather's instruction (2026-09).
+    // Server remains the authority via ValidationController.cs:1027-1033.
     for (const row of this.rowsForDisplayBucket(fileIndex, fieldType, 'new')) {
-      if (row.isAmbiguousMultiParty || isIdentityBackfillRow(row)) {
+      if (row.isAmbiguousMultiParty) {
         continue;
       }
       this.acceptRow(fileIndex, fieldType, row);
     }
 
     const ambiguous = this.ambiguousNewRows(fileIndex, fieldType);
-    const identityBackfill = this.rowsForDisplayBucket(fileIndex, fieldType, 'new')
-      .filter(row => !row.isAmbiguousMultiParty && isIdentityBackfillRow(row));
-    const blocked = [...ambiguous, ...identityBackfill];
-    if (blocked.length > 0) {
+    if (ambiguous.length > 0) {
       const fileId = this.resolveFileId(fileIndex);
       if (fileId == null) {
         return;
       }
-      this.pendingAmbiguousNotice = { fileId, fieldType, rows: blocked };
+      this.pendingAmbiguousNotice = { fileId, fieldType, rows: ambiguous };
     }
   }
 

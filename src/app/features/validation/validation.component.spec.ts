@@ -6,6 +6,7 @@ import { NotificationService } from 'src/app/core/services/notification.service'
 import {
   BatchValidationResult,
   ParentValidationResponse,
+  ParentValidationResult,
   ValidationResult
 } from './models/validation.models';
 import { ValidationApiService } from './services/validation-api.service';
@@ -62,6 +63,31 @@ function copiedParentResponse(): ParentValidationResponse {
     new: 0,
     isCopiedFromTenant: true,
     results: []
+  };
+}
+
+function makeParentNewRow(
+  tenantName: string,
+  rowIndex: number,
+  overrides: Partial<ParentValidationResult> = {}
+): ParentValidationResult {
+  return {
+    rowIndex,
+    propertyId: 'P-1',
+    unitId: 'U-1',
+    tenantName,
+    targetName: '',
+    buildingName: 'Building 1',
+    leaseStart: '2024-01-01',
+    status: 'new',
+    classifyStatus: 'new',
+    suggestion: null,
+    matchSource: null,
+    suggestedName: null,
+    confidence: null,
+    reason: 'New Parent Name',
+    appliesTo: [{ building: 'Building 1', unit: 'U-1' }],
+    ...overrides
   };
 }
 
@@ -386,6 +412,75 @@ describe('ValidationComponent positional fileIndex keying', () => {
     expect(input.value)
       .withContext('file input must be reset so re-picking the same file fires change')
       .toBe('');
+  });
+
+  function seedAcceptAsIsParentBatch(): {
+    backfilled: ParentValidationResult;
+    ordinary: ParentValidationResult;
+    ambiguous: ParentValidationResult;
+  } {
+    const backfilled = makeParentNewRow('Backfill Co', 10, {
+      isBackfilledFromTenant: true,
+      suggestion: null
+    });
+    const ordinary = makeParentNewRow('Ordinary Co', 11, {
+      isBackfilledFromTenant: false,
+      isAmbiguousMultiParty: false
+    });
+    const ambiguous = makeParentNewRow('Ambiguous Co', 12, {
+      isAmbiguousMultiParty: true,
+      isBackfilledFromTenant: false
+    });
+    component.batchResults = [
+      makeBatch('file-aaa', 'A.xlsx', rowA, {
+        total: 3,
+        excluded: 0,
+        suggested: 0,
+        flagged: 0,
+        new: 3,
+        results: [backfilled, ordinary, ambiguous]
+      })
+    ];
+    return { backfilled, ordinary, ambiguous };
+  }
+
+  it('T11: accept-all-as-is stages backfilled identity and ordinary parent rows, not ambiguous', () => {
+    const { backfilled, ordinary, ambiguous } = seedAcceptAsIsParentBatch();
+
+    (component as any).executeAcceptAllAsIs(0, 'parent');
+
+    const corrections = (component as any).corrections as Map<string, { originalName: string }>;
+    const stagedNames = Array.from(corrections.values()).map(c => c.originalName);
+    expect(stagedNames)
+      .withContext('backfilled identity parent must be staged by accept-all-as-is')
+      .toContain(backfilled.tenantName);
+    expect(stagedNames)
+      .withContext('ordinary new parent must be staged by accept-all-as-is')
+      .toContain(ordinary.tenantName);
+    expect(stagedNames)
+      .withContext('ambiguous multi-party parent must not be staged by accept-all-as-is')
+      .not.toContain(ambiguous.tenantName);
+  });
+
+  it('T12: acceptAsIsEligibleCount includes backfilled identity and excludes ambiguous', () => {
+    seedAcceptAsIsParentBatch();
+
+    expect(component.acceptAsIsEligibleCount(0, 'parent'))
+      .withContext('eligible count must include the backfilled row and exclude the ambiguous row')
+      .toBe(2);
+  });
+
+  it('T13: noticeReason for an ambiguous row on the built notice is Ambiguous name', () => {
+    seedAcceptAsIsParentBatch();
+    (component as any).executeAcceptAllAsIs(0, 'parent');
+
+    const noticed = component.pendingAmbiguousNotice?.rows[0];
+    expect(noticed)
+      .withContext('accept-all-as-is must build a notice that includes the ambiguous row')
+      .toBeDefined();
+    expect(component.noticeReason(noticed as ParentValidationResult))
+      .withContext('notice reason must be Ambiguous name')
+      .toBe('Ambiguous name');
   });
 });
 
