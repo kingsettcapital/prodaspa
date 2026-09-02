@@ -1,0 +1,53 @@
+---
+description: Standing execution doctrine for the Proda Validation Platform
+alwaysApply: true
+---
+
+# Execution doctrine
+
+## Git — hard rules
+- NEVER `git add -A` or `git add .`. Explicit per-file staging only.
+- NEVER stage `appsettings.json`. It carries plaintext secrets.
+- NEVER commit, push, checkout, stash, or reset unless explicitly told to in
+  the prompt. Reporting `git status` is always fine.
+- Run `git status` FIRST on any phase prompt. If the tree is not clean,
+  HALT and report. Do not "helpfully" clean it.
+
+## Evidence over assumption
+- Numbers stated in a prompt are the author's belief, not ground truth.
+  If a live parse disagrees with a stated number, **report the discrepancy
+  and use the live number.** State both.
+- Never adjust an assertion to make a test pass. Report the surprise.
+- Never delete or skip a failing test.
+- An unrun test is unverified, not green. Never substitute a mock for a real
+  connection and report it as passing.
+- If a required file is missing, HALT. Do not substitute a fixture.
+
+## Scope
+- Implement the contract given. Do not design beyond it.
+- If a required edit falls outside the prompt's ALLOWED FILES, STOP and
+  report why rather than making it.
+- If you believe a refactor is necessary to satisfy the contract, STOP and
+  report. Do not perform it.
+- Never touch `prodaspa` unless the prompt says so.
+
+## Product invariants — never violate
+- Accountability is the prime directive. Nothing is silently dropped,
+  hidden, or altered. Every parsed row stays addressable at write-back and
+  countable in totals.
+- Three grains must agree in meaning: display (what the reviewer sees),
+  write (which cells change), audit (what ValidationCorrectionstbl records).
+- Collapsing is a DISPLAY concern only. Never reduce pipeline scope to
+  reduce review burden.
+- Bulk actions read unfiltered arrays, never the filtered view.
+- Stable keys over positional keys. `fileId`, not `fileIndex`.
+- Normalization belongs at the parse boundary, in ONE predicate at ONE site.
+- Sentinel/blank/placeholder values must never be written as `SourceName`
+  into a mapping table.
+
+## Reporting
+- Report findings IN CHAT. Do not create a `.md` file unless the prompt
+  explicitly asks for one.
+- Report file:line for every claim about the codebase.
+- Where something does not exist, write NOT FOUND. Do not guess, do not
+  create it.
