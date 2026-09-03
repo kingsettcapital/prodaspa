@@ -1826,9 +1826,13 @@ export class ValidationComponent implements OnInit, OnDestroy {
         matchSource: c.matchSource,
         appliesTo: c.appliesTo
       }));
+    // OverlayKey grain is Building+Unit+Name. mapClosedDealsGroup builds
+    // appliesTo as one {building,unit} per sibling rowIndex so the row object
+    // keeps a slot per sheet row (T8). uniqueAppliesTo collapses that back to
+    // one identity per group here — payload item count, not rowIndexes.
     const closedDealsCorrections = records
       .filter(c => c.fieldType === 'ClosedDealsTenant')
-      .flatMap(c => this.correctionTargets(c).map(target => ({
+      .flatMap(c => this.uniqueAppliesTo(this.correctionTargets(c)).map(target => ({
         rowIndex: c.rowIndex,
         section: 'ClosedDeals' as const,
         building: target.building,

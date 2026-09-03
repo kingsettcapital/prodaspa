@@ -1662,6 +1662,153 @@ describe('ValidationComponent characterization (Phase 1c)', () => {
     expect(cd.unitId).toBeUndefined();
   });
 
+  it('T19_oneItemPerGroup_multiRowCdGroupProducesOnePayloadItem', () => {
+    const sheetRows = [47, 48, 49, 50, 51, 52, 53, 54];
+    seedTenantAndParent(
+      [characterizationRow(1, 'RR Filler', 'new')],
+      [characterizationRow(2, 'Parent Filler', 'new')],
+      cdResponse([
+        cdGroup('AERIE', 'suggested', sheetRows, {
+          unit: '2B',
+          building: 'MIDTOWN PLAZA RETAIL',
+          suggestion: 'Aerie',
+          suggestedName: 'Aerie',
+          matchSource: 'MasterList',
+          confidence: 100
+        })
+      ])
+    );
+
+    const row = component
+      .rowsForDisplayBucket(0, 'closedDealsTenant', 'suggested')[0] as ClosedDealsMappedRow;
+    expect(row.rowIndexes)
+      .withContext('rowIndexes on the row object must stay the full sibling set')
+      .toEqual(sheetRows);
+    expect(row.appliesTo.length).toBe(sheetRows.length);
+
+    component.acceptRow(0, 'closedDealsTenant', row);
+
+    expect(row.rowIndexes).toEqual(sheetRows);
+    const payload = (component as any).buildDownloadPayload(0);
+    expect(payload.closedDealsCorrections.length)
+      .withContext('8 sheet rows, one OverlayKey group → one payload item')
+      .toBe(1);
+    const item = payload.closedDealsCorrections[0];
+    expect(item.building).toBe('MIDTOWN PLAZA RETAIL');
+    expect(item.unit).toBe('2B');
+    expect(item.originalName).toBe('AERIE');
+    expect(item.correctedName).toBe('Aerie');
+    expect(item.rowIndex).toBe(sheetRows[0]);
+    expect(item.section).toBe('ClosedDeals');
+  });
+
+  it('T20_groupCountNotRowCount_multipleMultiRowCdGroups', () => {
+    const aerieRows = [47, 48, 49, 50, 51, 52, 53, 54];
+    const lovisaRows = [4, 5, 6, 7, 8, 9, 10, 11];
+    const nespressoRows = [37];
+    seedTenantAndParent(
+      [characterizationRow(1, 'RR Filler', 'new')],
+      [characterizationRow(2, 'Parent Filler', 'new')],
+      cdResponse([
+        cdGroup('AERIE', 'new', aerieRows, {
+          unit: '2B',
+          building: 'MIDTOWN PLAZA RETAIL'
+        }),
+        cdGroup('LOVISA CANADA LTD.', 'suggested', lovisaRows, {
+          unit: '15',
+          building: 'MIDTOWN PLAZA RETAIL',
+          suggestion: 'LOVISA CANADA',
+          suggestedName: 'LOVISA CANADA',
+          matchSource: 'Normalisation'
+        }),
+        cdGroup('NESPRESSO/NESPRESSO BOUTIQUE', 'new', nespressoRows, {
+          unit: '258',
+          building: 'MIDTOWN PLAZA RETAIL'
+        })
+      ])
+    );
+
+    const sheetRowTotal = aerieRows.length + lovisaRows.length + nespressoRows.length;
+    expect(sheetRowTotal).toBe(17);
+
+    for (const row of component.rowsForDisplayBucket(0, 'closedDealsTenant', 'new')) {
+      component.acceptRow(0, 'closedDealsTenant', row);
+    }
+    for (const row of component.rowsForDisplayBucket(0, 'closedDealsTenant', 'suggested')) {
+      component.acceptRow(0, 'closedDealsTenant', row);
+    }
+
+    const payload = (component as any).buildDownloadPayload(0);
+    expect(payload.closedDealsCorrections.length)
+      .withContext('3 corrected groups, not 17 sheet rows')
+      .toBe(3);
+    expect(payload.closedDealsCorrections.length).not.toBe(sheetRowTotal);
+    expect(payload.closedDealsCorrections.map((c: { originalName: string }) => c.originalName).sort())
+      .toEqual(['AERIE', 'LOVISA CANADA LTD.', 'NESPRESSO/NESPRESSO BOUTIQUE']);
+  });
+
+  it('T21_tenantParentUntouched_sameDecisionsSameArrays', () => {
+    const tenantRow = characterizationRow(2, 'COLLIDEZYNX', 'new', {
+      unitId: '101',
+      buildingName: 'Harbor Test Mall',
+      appliesTo: [{ building: 'Harbor Test Mall', unit: '101' }]
+    });
+    const parentRow = characterizationRow(3, 'Harbor Holdings', 'suggested', {
+      suggestion: 'Harbor Holdings Canon',
+      suggestedName: 'Harbor Holdings Canon',
+      matchSource: 'MasterList',
+      appliesTo: [{ building: 'Harbor Test Mall', unit: '101' }]
+    });
+    seedTenantAndParent(
+      [tenantRow],
+      [parentRow],
+      cdResponse([
+        cdGroup('COLLIDEZYNX', 'new', [2], {
+          unit: '101',
+          building: 'Harbor Test Mall'
+        }),
+        cdGroup('AERIE', 'new', [47, 48, 49, 50, 51, 52, 53, 54], {
+          unit: '2B',
+          building: 'MIDTOWN PLAZA RETAIL'
+        })
+      ])
+    );
+
+    component.acceptRow(0, 'tenant', tenantRow);
+    component.acceptRow(0, 'parent', parentRow);
+    for (const row of component.rowsForDisplayBucket(0, 'closedDealsTenant', 'new')) {
+      component.acceptRow(0, 'closedDealsTenant', row);
+    }
+
+    const payload = (component as any).buildDownloadPayload(0);
+    expect(JSON.stringify(payload.tenantCorrections)).toBe(JSON.stringify([
+      {
+        rowIndex: 2,
+        unitId: '101',
+        building: 'Harbor Test Mall',
+        originalName: 'COLLIDEZYNX',
+        correctedName: 'COLLIDEZYNX',
+        changeType: 'AcceptedAsIs',
+        confidence: null,
+        matchSource: 'AcceptedAsIs'
+      }
+    ]));
+    expect(JSON.stringify(payload.parentCorrections)).toBe(JSON.stringify([
+      {
+        rowIndex: 3,
+        originalName: 'Harbor Holdings',
+        correctedName: 'Harbor Holdings Canon',
+        changeType: 'AcceptedSuggestion',
+        confidence: 0.9,
+        matchSource: 'MasterList',
+        appliesTo: [{ building: 'Harbor Test Mall', unit: '101' }]
+      }
+    ]));
+    expect(payload.tenantCorrections.length).toBe(1);
+    expect(payload.parentCorrections.length).toBe(1);
+    expect(payload.closedDealsCorrections.length).toBe(2);
+  });
+
   it('T6_CHARACTERIZATION_parentTab_cannotLandWithoutParentResponse', () => {
     seedTenantResults([characterizationRow(1, 'Solo Tenant Row', 'new')]);
     expect(component.batchResults[0].parentResponse).toBeNull();
