@@ -1,14 +1,23 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import {
+  ClosedDealsMappedRow,
   CorrectionChangeType,
   ParentAppliesToItem,
   ParentValidationResult,
   ValidationResult
 } from './models/validation.models';
 
-export type FieldType = 'tenant' | 'parent';
+export type FieldType = 'tenant' | 'parent' | 'closedDealsTenant';
+
+/** Load-bearing: this Record is the only exhaustiveness check on FieldType.
+ *  Deleting it, or widening FieldType without adding a key, removes the tripwire. */
+export const FIELD_TYPE_TAB_LABELS: Record<FieldType, string> = {
+  tenant: 'RR Tenant Name',
+  parent: 'RR Parent Name',
+  closedDealsTenant: 'CD Tenant Name'
+};
 export type BucketKey = 'new' | 'flagged' | 'suggested' | 'excluded';
-export type ValidationRow = ValidationResult | ParentValidationResult;
+export type ValidationRow = ValidationResult | ParentValidationResult | ClosedDealsMappedRow;
 
 export interface OverridePopoverRequest {
   row: ValidationRow;
@@ -46,6 +55,9 @@ export class ValidationResultTableComponent {
     }
     if (this.fieldType === 'parent') {
       return 'Corrected Parent Name';
+    }
+    if (this.fieldType === 'closedDealsTenant') {
+      return 'Corrected CD Tenant Name';
     }
     switch (this.bucket) {
       case 'excluded':
@@ -127,7 +139,31 @@ export class ValidationResultTableComponent {
       }
       return [{ building: tenant.buildingName, unit: tenant.unitId }];
     }
-    return (row as ParentValidationResult).appliesTo ?? [];
+    if (this.fieldType === 'parent') {
+      return (row as ParentValidationResult).appliesTo ?? [];
+    }
+    if (this.fieldType === 'closedDealsTenant') {
+      const cd = row as ClosedDealsMappedRow;
+      const raw = cd.appliesTo?.length
+        ? cd.appliesTo
+        : [{ building: cd.buildingName, unit: cd.unitId }];
+      return this.uniqueAppliesTo(raw);
+    }
+    return [];
+  }
+
+  private uniqueAppliesTo(items: ParentAppliesToItem[]): ParentAppliesToItem[] {
+    const seen = new Set<string>();
+    const unique: ParentAppliesToItem[] = [];
+    for (const item of items) {
+      const key = `${item.building ?? ''}\0${item.unit ?? ''}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      unique.push(item);
+    }
+    return unique;
   }
 
   hasSuggestion(row: ValidationRow): boolean {

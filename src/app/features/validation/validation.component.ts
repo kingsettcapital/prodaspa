@@ -7,10 +7,14 @@ import { ValidationApiService } from './services/validation-api.service';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import {
   BatchValidationResult,
+  ClosedDealsMappedRow,
+  ClosedDealsValidationGroup,
   CorrectionChangeType,
   DownloadCorrectionsPayload,
   DraftDetail,
   DraftSummary,
+  FrontendStatus,
+  ClassifyStatus,
   MatchSource,
   ParentAppliesToItem,
   ParentValidationResult,
@@ -20,6 +24,7 @@ import {
 import {
   BucketKey,
   FieldType,
+  FIELD_TYPE_TAB_LABELS,
   OverridePopoverRequest,
   ValidationRow
 } from './validation-result-table.component';
@@ -51,7 +56,7 @@ interface PendingOverride {
 
 export interface StoredCorrectionRecord {
   rowIndex: number;
-  fieldType: 'Tenant' | 'Parent';
+  fieldType: 'Tenant' | 'Parent' | 'ClosedDealsTenant';
   originalName: string;
   correctedName: string;
   changeType: CorrectionChangeType;
@@ -74,7 +79,7 @@ interface FieldGroupConfig {
   nameColumnLabel: string;
 }
 
-const ALL_FIELD_TYPES: readonly FieldType[] = ['tenant', 'parent'];
+const ALL_FIELD_TYPES: readonly FieldType[] = ['tenant', 'parent', 'closedDealsTenant'];
 const ALL_BUCKET_KEYS: readonly BucketKey[] = ['new', 'flagged', 'suggested', 'excluded'];
 
 type BulkActionType = 'apply-all' | 'accept-as-is' | 'standardise';
@@ -205,6 +210,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     { key: 'suggested', label: '⚠️ Suggested', headerClass: 'bucket-header--suggested' },
     { key: 'excluded', label: '✅ Corrected', headerClass: 'bucket-header--correct' }
   ];
+  readonly fieldTypeTabLabels = FIELD_TYPE_TAB_LABELS;
 
   constructor(
     private validationApi: ValidationApiService,
@@ -551,6 +557,52 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return this.batchResults[fileIndex]?.parentResponse != null;
   }
 
+  hasClosedDealsResponse(fileIndex: number): boolean {
+    return this.batchResults[fileIndex]?.closedDealsResponse != null;
+  }
+
+  /**
+   * FAILED is `error` present. Must be consulted before groups, counters,
+   * or bucket construction — FAILED sends total/status 0 and empty groups.
+   */
+  isClosedDealsFailed(fileIndex: number): boolean {
+    const cd = this.batchResults[fileIndex]?.closedDealsResponse;
+    if (cd == null) {
+      return false;
+    }
+    return cd.error != null;
+  }
+
+  closedDealsFailureMessage(fileIndex: number): string {
+    const message = this.batchResults[fileIndex]?.closedDealsResponse?.error?.message;
+    const trimmed = (message ?? '').trim();
+    return trimmed.length > 0 ? trimmed : 'Closed Deals could not be parsed.';
+  }
+
+  isFieldToggleDisabled(fileIndex: number, type: FieldType): boolean {
+    return type === 'parent' && !this.hasParentResponse(fileIndex);
+  }
+
+  fieldToggleDisabledReason(fileIndex: number, type: FieldType): string {
+    if (this.isFieldToggleDisabled(fileIndex, type)) {
+      return 'No parent data in this file';
+    }
+    return '';
+  }
+
+  fieldToggleLabel(fileIndex: number, type: FieldType): string {
+    if (type === 'closedDealsTenant' && this.isClosedDealsFailed(fileIndex)) {
+      return `${this.fieldTypeTabLabels[type]} — failed`;
+    }
+    return `${this.fieldTypeTabLabels[type]} (${this.fieldGroupRowCount(fileIndex, type)})`;
+  }
+
+  fieldToggleTypesFor(fileIndex: number): readonly FieldType[] {
+    return this.hasClosedDealsResponse(fileIndex)
+      ? ALL_FIELD_TYPES
+      : ['tenant', 'parent'];
+  }
+
   private parentCopyConfirmed = new Set<string>();
 
   isParentCopyPending(fileIndex: number): boolean {
@@ -573,29 +625,54 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   fieldGroupsFor(fileIndex: number): FieldGroupConfig[] {
-    const groups: FieldGroupConfig[] = [
-      { type: 'tenant', label: 'Tenant names', nameColumnLabel: 'Source Tenant Name' }
-    ];
-    if (this.hasParentResponse(fileIndex)) {
-      groups.push({ type: 'parent', label: 'Parent names', nameColumnLabel: 'Source Parent Name' });
-    }
-    return groups;
+    return this.fieldToggleTypesFor(fileIndex).map(type => this.fieldGroupConfig(type));
   }
 
   fieldGroupConfig(fieldType: FieldType): FieldGroupConfig {
-    return fieldType === 'parent'
-      ? { type: 'parent', label: 'Parent names', nameColumnLabel: 'Source Parent Name' }
-      : { type: 'tenant', label: 'Tenant names', nameColumnLabel: 'Source Tenant Name' };
+    if (fieldType === 'parent') {
+      return {
+        type: 'parent',
+        label: FIELD_TYPE_TAB_LABELS.parent,
+        nameColumnLabel: 'Source Parent Name'
+      };
+    }
+    if (fieldType === 'closedDealsTenant') {
+      return {
+        type: 'closedDealsTenant',
+        label: FIELD_TYPE_TAB_LABELS.closedDealsTenant,
+        nameColumnLabel: 'Source CD Tenant Name'
+      };
+    }
+    return {
+      type: 'tenant',
+      label: FIELD_TYPE_TAB_LABELS.tenant,
+      nameColumnLabel: 'Source Tenant Name'
+    };
   }
 
   activeFieldType(fileIndex: number): FieldType {
     const fileId = this.resolveFileId(fileIndex);
     const tab = (fileId != null ? this.activeFieldTabByFile.get(fileId) : undefined) ?? 'tenant';
-    return tab === 'parent' && this.hasParentResponse(fileIndex) ? 'parent' : 'tenant';
+    if (tab === 'closedDealsTenant') {
+      return this.hasClosedDealsResponse(fileIndex) ? 'closedDealsTenant' : 'tenant';
+    }
+    if (tab === 'parent' && this.hasParentResponse(fileIndex)) {
+      return 'parent';
+    }
+    return 'tenant';
   }
 
   onFieldToggleChange(fileIndex: number, event: MatButtonToggleChange): void {
-    const type = event.value === 'parent' ? 'parent' : 'tenant';
+    let type: FieldType;
+    if (event.value === 'closedDealsTenant') {
+      type = 'closedDealsTenant';
+    } else if (event.value === 'parent') {
+      type = 'parent';
+    } else if (event.value === 'tenant') {
+      type = 'tenant';
+    } else {
+      return;
+    }
     this.setActiveFieldTab(fileIndex, type);
   }
 
@@ -840,16 +917,68 @@ export class ValidationComponent implements OnInit, OnDestroy {
     }
 
     let rows: ValidationRow[];
-    if (fieldType === 'tenant') {
+    if (fieldType === 'closedDealsTenant') {
+      if (this.isClosedDealsFailed(fileIndex)) {
+        rows = [];
+      } else {
+        const groups = result.closedDealsResponse?.groups ?? [];
+        rows = groups
+          .map(group => this.mapClosedDealsGroup(group))
+          .filter(r => r.status === bucket);
+      }
+    } else if (fieldType === 'tenant') {
       rows = result.response.results.filter(r => r.status === bucket);
-    } else if (!result.parentResponse) {
-      rows = [];
+    } else if (fieldType === 'parent') {
+      if (!result.parentResponse) {
+        rows = [];
+      } else {
+        rows = result.parentResponse.results.filter(r => r.status === bucket);
+      }
     } else {
-      rows = result.parentResponse.results.filter(r => r.status === bucket);
+      rows = [];
     }
 
     this.rowsForBucketCache.set(cacheKey, rows);
     return rows;
+  }
+
+  private mapClosedDealsGroup(group: ClosedDealsValidationGroup): ClosedDealsMappedRow {
+    const rowIndexes = Array.isArray(group.rowIndexes) ? [...group.rowIndexes] : [];
+    const building = group.building ?? '';
+    const unit = group.unit ?? '';
+    return {
+      rowIndex: rowIndexes[0] ?? 0,
+      propertyId: '',
+      unitId: unit,
+      tenantName: group.tenantName ?? '',
+      targetName: group.suggestedName || group.tenantName || '',
+      buildingName: building,
+      leaseStart: '',
+      status: group.status as FrontendStatus,
+      classifyStatus: group.classifyStatus as ClassifyStatus,
+      suggestion: group.suggestion,
+      matchSource: group.matchSource,
+      suggestedName: group.suggestedName || null,
+      confidence: group.confidence,
+      reason: group.reason ?? '',
+      isAmbiguousMultiParty: !!group.isAmbiguousMultiParty,
+      appliesTo: rowIndexes.map(() => ({ building, unit })),
+      rowIndexes
+    };
+  }
+
+  private uniqueAppliesTo(items: ParentAppliesToItem[]): ParentAppliesToItem[] {
+    const seen = new Set<string>();
+    const unique: ParentAppliesToItem[] = [];
+    for (const item of items) {
+      const key = `${item.building ?? ''}\0${item.unit ?? ''}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      unique.push(item);
+    }
+    return unique;
   }
 
   private isVacantRow(row: ValidationRow): boolean {
@@ -935,12 +1064,14 @@ export class ValidationComponent implements OnInit, OnDestroy {
       return true;
     }
 
-    if (fieldType === 'tenant') {
+    if (fieldType === 'tenant' || fieldType === 'closedDealsTenant') {
       return ((row as ValidationResult)?.unitId ?? '').toLowerCase().includes(needle);
     }
-
-    const appliesTo = (row as ParentValidationResult)?.appliesTo ?? [];
-    return appliesTo.some(item => (item?.unit ?? '').toLowerCase().includes(needle));
+    if (fieldType === 'parent') {
+      const appliesTo = (row as ParentValidationResult)?.appliesTo ?? [];
+      return appliesTo.some(item => (item?.unit ?? '').toLowerCase().includes(needle));
+    }
+    return false;
   }
 
   private clearRowsForBucketCache(): void {
@@ -1143,6 +1274,9 @@ export class ValidationComponent implements OnInit, OnDestroy {
     event: Event
   ): void {
     event.stopPropagation();
+    if (fieldType === 'closedDealsTenant' && this.isClosedDealsFailed(fileIndex)) {
+      return;
+    }
     const fileId = this.resolveFileId(fileIndex);
     if (fileId == null) {
       return;
@@ -1243,6 +1377,13 @@ export class ValidationComponent implements OnInit, OnDestroy {
     if (!this.pendingAmbiguousNotice) {
       return [];
     }
+    if (this.pendingAmbiguousNotice.fieldType === 'closedDealsTenant') {
+      const cd = row as ClosedDealsMappedRow;
+      if (cd.appliesTo?.length) {
+        return this.uniqueAppliesTo(cd.appliesTo);
+      }
+      return [{ building: cd.buildingName, unit: cd.unitId }];
+    }
     if (this.pendingAmbiguousNotice.fieldType === 'tenant') {
       const tenant = row as ValidationResult;
       if (tenant.appliesTo?.length) {
@@ -1250,7 +1391,10 @@ export class ValidationComponent implements OnInit, OnDestroy {
       }
       return [{ building: tenant.buildingName, unit: tenant.unitId }];
     }
-    return (row as ParentValidationResult).appliesTo ?? [];
+    if (this.pendingAmbiguousNotice.fieldType === 'parent') {
+      return (row as ParentValidationResult).appliesTo ?? [];
+    }
+    return [];
   }
 
   applyAllSuggestionsCount(fileIndex: number, fieldType: FieldType): number {
@@ -1288,6 +1432,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     this.batchResults.forEach((_, fileIndex) => {
       this.autoStageForField(fileIndex, 'tenant');
       this.autoStageForField(fileIndex, 'parent');
+      this.autoStageForField(fileIndex, 'closedDealsTenant');
     });
     this.autoAlignApplied = true;
   }
@@ -1409,7 +1554,14 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   private correctionKey(fileIndex: number, fieldType: FieldType, row: ValidationRow): string {
-    const scope = fieldType === 'tenant' ? 'tenant' : 'parent';
+    let scope: string;
+    if (fieldType === 'closedDealsTenant') {
+      scope = 'closedDealsTenant';
+    } else if (fieldType === 'parent') {
+      scope = 'parent';
+    } else {
+      scope = 'tenant';
+    }
     const fileId = this.resolveFileId(fileIndex);
     if (fileId == null) {
       return `__unresolved:${fileIndex}|${scope}|${row.rowIndex}`;
@@ -1431,7 +1583,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     const map = new Map(this.corrections);
   const record: StoredCorrectionRecord = {
     rowIndex: row.rowIndex,
-    fieldType: fieldType === 'tenant' ? 'Tenant' : 'Parent',
+    fieldType: this.storedFieldType(fieldType),
       originalName: row.tenantName,
       correctedName: update.correctedName,
       changeType: update.changeType,
@@ -1439,9 +1591,9 @@ export class ValidationComponent implements OnInit, OnDestroy {
       matchSource: update.matchSource,
       unitId: '',
       building: '',
-      appliesTo: fieldType === 'tenant'
-        ? this.tenantAppliesTo(row as ValidationResult)
-        : (row as ParentValidationResult).appliesTo ?? []
+      appliesTo: fieldType === 'parent'
+        ? (row as ParentValidationResult).appliesTo ?? []
+        : this.tenantAppliesTo(row as ValidationResult)
     };
     map.set(this.correctionKey(fileIndex, fieldType, row), record);
     this.corrections = map;
@@ -1602,6 +1754,16 @@ export class ValidationComponent implements OnInit, OnDestroy {
     this.downloadSubscriptions.set(fileId, subscription);
   }
 
+  private storedFieldType(fieldType: FieldType): StoredCorrectionRecord['fieldType'] {
+    if (fieldType === 'parent') {
+      return 'Parent';
+    }
+    if (fieldType === 'closedDealsTenant') {
+      return 'ClosedDealsTenant';
+    }
+    return 'Tenant';
+  }
+
   private tenantAppliesTo(row: ValidationResult): ParentAppliesToItem[] {
     if (row.appliesTo?.length) {
       return row.appliesTo;
@@ -1664,6 +1826,19 @@ export class ValidationComponent implements OnInit, OnDestroy {
         matchSource: c.matchSource,
         appliesTo: c.appliesTo
       }));
+    const closedDealsCorrections = records
+      .filter(c => c.fieldType === 'ClosedDealsTenant')
+      .flatMap(c => this.correctionTargets(c).map(target => ({
+        rowIndex: c.rowIndex,
+        section: 'ClosedDeals' as const,
+        building: target.building,
+        unit: target.unit,
+        originalName: c.originalName,
+        correctedName: c.correctedName,
+        changeType: c.changeType,
+        confidence: c.confidence,
+        matchSource: c.matchSource
+      })));
     const parentResponse = this.batchResults[fileIndex]?.parentResponse;
     const copyTenantToParent =
       !!parentResponse?.isCopiedFromTenant && fileId != null && this.parentCopyConfirmed.has(fileId);
@@ -1671,6 +1846,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
       fileId: fileId ?? '',
       tenantCorrections,
       parentCorrections,
+      closedDealsCorrections,
       copyTenantToParent
     };
   }
@@ -2108,6 +2284,22 @@ export class ValidationComponent implements OnInit, OnDestroy {
             continue;
           }
           this.setCorrection(0, 'parent', row, {
+            correctedName: d.correctedName,
+            changeType: d.changeType,
+            confidence: d.confidence,
+            matchSource: this.matchSourceForResume(d.changeType, d.matchSource)
+          });
+        }
+
+        for (const d of decisions.closedDealsCorrections ?? []) {
+          const row = (this.batchResults[0].closedDealsResponse?.groups ?? [])
+            .map(group => this.mapClosedDealsGroup(group))
+            .find(r => r.rowIndex === d.rowIndex);
+          if (!row) {
+            skipped.push(`closedDealsTenant:${d.originalName}`);
+            continue;
+          }
+          this.setCorrection(0, 'closedDealsTenant', row, {
             correctedName: d.correctedName,
             changeType: d.changeType,
             confidence: d.confidence,

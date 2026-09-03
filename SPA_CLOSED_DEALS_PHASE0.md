@@ -26,16 +26,16 @@ develop
 `git log --oneline -5`
 
 ```
+34e1346 cloased deal phase 0 UI
 39459c8 Add execution doctrine rule file
 fe1c8a3 allow accept/override on backfilled parent rows
 bc5995b Minor bug fix
 9932169 Placed the clear all button back to its original place
-64b186b Relabel and relocate Clear File to a single batch-level Clear All Files control
 ```
 
 HEAD is `develop`. Audit continues.
 
-Modified or untracked files at Step 0: **none**.
+Modified or untracked files at Step 0: **none**. `34e1346` is this audit file (`SPA_CLOSED_DEALS_PHASE0.md` only; `git show --stat` that commit). Production sources were re-checked against HEAD; Q1–Q7 line citations still match live code.
 
 Uncommitted upload-bar / remove-file changeset in the working tree: **no**. Evidence: `git status --porcelain` empty. `removeValidatedFile` exists in committed `validation.component.ts:349` and is bound in committed `validation.component.html:185`; that is HEAD, not an uncommitted diff.
 

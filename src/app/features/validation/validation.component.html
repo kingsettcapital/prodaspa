@@ -152,23 +152,21 @@
           </div>
           <div class="file-card__header-center">
             <mat-button-toggle-group
-              *ngIf="isFileExpanded(fileIndex) && hasParentResponse(fileIndex)"
+              *ngIf="isFileExpanded(fileIndex)"
               class="field-toggle"
               [value]="activeFieldType(fileIndex)"
               (change)="onFieldToggleChange(fileIndex, $event)"
               (click)="$event.stopPropagation()"
             >
               <mat-button-toggle
-                value="tenant"
+                *ngFor="let type of fieldToggleTypesFor(fileIndex)"
+                [value]="type"
+                [disabled]="isFieldToggleDisabled(fileIndex, type)"
+                [attr.title]="fieldToggleDisabledReason(fileIndex, type) || null"
+                [class.field-toggle--cd-failed]="type === 'closedDealsTenant' && isClosedDealsFailed(fileIndex)"
                 (click)="$event.stopPropagation()"
               >
-                Tenant names ({{ fieldGroupRowCount(fileIndex, 'tenant') }})
-              </mat-button-toggle>
-              <mat-button-toggle
-                value="parent"
-                (click)="$event.stopPropagation()"
-              >
-                Parent names ({{ fieldGroupRowCount(fileIndex, 'parent') }})
+                {{ fieldToggleLabel(fileIndex, type) }}
               </mat-button-toggle>
             </mat-button-toggle-group>
           </div>
@@ -190,7 +188,10 @@
         </div>
 
         <div class="file-card__body" *ngIf="isFileExpanded(fileIndex)">
-          <div class="file-card__filters">
+          <div
+            class="file-card__filters"
+            *ngIf="!(isClosedDealsFailed(fileIndex) && activeFieldType(fileIndex) === 'closedDealsTenant')"
+          >
             <div class="file-card__search">
               <mat-icon class="file-card__search-icon">search</mat-icon>
               <input
@@ -225,6 +226,20 @@
           ></ng-container>
 
           <ng-template #fieldBucketsTpl let-fileIndex="fileIndex" let-fieldGroup="fieldGroup">
+              <div
+                class="cd-failed"
+                *ngIf="fieldGroup.type === 'closedDealsTenant' && isClosedDealsFailed(fileIndex)"
+                role="alert"
+              >
+                <mat-icon class="cd-failed__icon">warning</mat-icon>
+                <div class="cd-failed__body">
+                  <p class="cd-failed__title">Closed Deals could not be parsed</p>
+                  <p class="cd-failed__message">{{ closedDealsFailureMessage(fileIndex) }}</p>
+                </div>
+              </div>
+              <ng-container
+                *ngIf="fieldGroup.type !== 'closedDealsTenant' || !isClosedDealsFailed(fileIndex)"
+              >
               <div
                 class="parent-copy-prompt"
                 *ngIf="fieldGroup.type === 'parent' && isParentCopyPending(fileIndex)"
@@ -334,6 +349,7 @@
                     ></mat-paginator>
                   </div>
                 </div>
+              </ng-container>
               </ng-container>
           </ng-template>
           </div>
