@@ -1099,11 +1099,10 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   exactMatchCount(fileIndex: number): number {
     let count = 0;
-    for (const type of this.fieldToggleTypesFor(fileIndex)) {
-      for (const row of this.rowsForDisplayBucket(fileIndex, type, 'excluded')) {
-        if (!this.isDivergentFromMaster(row)) {
-          count++;
-        }
+    const type = this.activeFieldType(fileIndex);
+    for (const row of this.rowsForDisplayBucket(fileIndex, type, 'excluded')) {
+      if (!this.isDivergentFromMaster(row)) {
+        count++;
       }
     }
     return count;
