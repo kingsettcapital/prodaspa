@@ -1097,6 +1097,18 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return count;
   }
 
+  exactMatchCount(fileIndex: number): number {
+    let count = 0;
+    for (const type of this.fieldToggleTypesFor(fileIndex)) {
+      for (const row of this.rowsForDisplayBucket(fileIndex, type, 'excluded')) {
+        if (!this.isDivergentFromMaster(row)) {
+          count++;
+        }
+      }
+    }
+    return count;
+  }
+
   tableAcceptedKeys(fileIndex: number, fieldType: FieldType): Set<string> {
     const cacheKey = this.tableCacheKey(fileIndex, fieldType);
     const cachedVersion = this.acceptedKeysCacheVersion.get(cacheKey);

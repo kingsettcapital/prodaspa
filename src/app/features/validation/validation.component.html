@@ -171,8 +171,8 @@
             </mat-button-toggle-group>
           </div>
           <div class="file-card__header-right">
-            <span class="file-card__corrections-badge" *ngIf="acceptedCount(fileIndex) > 0">
-              {{ acceptedCount(fileIndex) }} corrections ready
+            <span class="file-card__corrections-badge" *ngIf="exactMatchCount(fileIndex) > 0">
+              {{ exactMatchCount(fileIndex) }} exact matches found
             </span>
             <button
               type="button"
