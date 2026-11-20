@@ -1,14 +1,23 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import {
+  ClosedDealsMappedRow,
+  CorrectionChangeType,
   ParentAppliesToItem,
   ParentValidationResult,
-  ValidationResult,
-  isIdentityBackfillRow
+  ValidationResult
 } from './models/validation.models';
 
-export type FieldType = 'tenant' | 'parent';
+export type FieldType = 'tenant' | 'parent' | 'closedDealsTenant';
+
+/** Load-bearing: this Record is the only exhaustiveness check on FieldType.
+ *  Deleting it, or widening FieldType without adding a key, removes the tripwire. */
+export const FIELD_TYPE_TAB_LABELS: Record<FieldType, string> = {
+  tenant: 'RR Tenant Name',
+  parent: 'RR Parent Name',
+  closedDealsTenant: 'CD Tenant Name'
+};
 export type BucketKey = 'new' | 'flagged' | 'suggested' | 'excluded';
-export type ValidationRow = ValidationResult | ParentValidationResult;
+export type ValidationRow = ValidationResult | ParentValidationResult | ClosedDealsMappedRow;
 
 export interface OverridePopoverRequest {
   row: ValidationRow;
@@ -29,6 +38,7 @@ export class ValidationResultTableComponent {
   @Input() rows: ValidationRow[] = [];
   @Input() acceptedKeys: Set<string> = new Set();
   @Input() correctionByKey: Map<string, string> = new Map();
+  @Input() changeTypeByKey: Map<string, CorrectionChangeType> = new Map();
 
   @Output() accept = new EventEmitter<ValidationRow>();
   @Output() manual = new EventEmitter<{ row: ValidationRow; value: string }>();
@@ -36,13 +46,6 @@ export class ValidationResultTableComponent {
   @Output() overrideRequest = new EventEmitter<OverridePopoverRequest>();
 
   get showActionColumn(): boolean {
-    return this.bucket !== 'excluded';
-  }
-
-  get showAcceptedIndicator(): boolean {
-    // accepted indicator (✓ Corrected + Undo) renders in every bucket,
-    // including Correct; only the pending accept/override controls are
-    // bucket-gated (see template).
     return true;
   }
 
@@ -52,6 +55,9 @@ export class ValidationResultTableComponent {
     }
     if (this.fieldType === 'parent') {
       return 'Corrected Parent Name';
+    }
+    if (this.fieldType === 'closedDealsTenant') {
+      return 'Corrected CD Tenant Name';
     }
     switch (this.bucket) {
       case 'excluded':
@@ -75,6 +81,24 @@ export class ValidationResultTableComponent {
 
   isAccepted(row: ValidationRow): boolean {
     return this.acceptedKeys.has(this.rowKey(row));
+  }
+
+  isManuallyOverridden(row: ValidationRow): boolean {
+    return this.changeTypeByKey.get(this.rowKey(row)) === 'ManualOverride';
+  }
+
+  isRowAcceptedStyled(row: ValidationRow): boolean {
+    return this.isManuallyOverridden(row) || (this.isAccepted(row) && this.bucket !== 'excluded');
+  }
+
+  excludedActionLabel(row: ValidationRow): string {
+    if (this.isManuallyOverridden(row)) {
+      return `✓ Overridden: ${this.correctionText(row)}`;
+    }
+    if (this.isAccepted(row)) {
+      return `✓ Corrected: ${this.correctionText(row)}`;
+    }
+    return '✓ Exact match';
   }
 
   correctionText(row: ValidationRow): string {
@@ -115,7 +139,31 @@ export class ValidationResultTableComponent {
       }
       return [{ building: tenant.buildingName, unit: tenant.unitId }];
     }
-    return (row as ParentValidationResult).appliesTo ?? [];
+    if (this.fieldType === 'parent') {
+      return (row as ParentValidationResult).appliesTo ?? [];
+    }
+    if (this.fieldType === 'closedDealsTenant') {
+      const cd = row as ClosedDealsMappedRow;
+      const raw = cd.appliesTo?.length
+        ? cd.appliesTo
+        : [{ building: cd.buildingName, unit: cd.unitId }];
+      return this.uniqueAppliesTo(raw);
+    }
+    return [];
+  }
+
+  private uniqueAppliesTo(items: ParentAppliesToItem[]): ParentAppliesToItem[] {
+    const seen = new Set<string>();
+    const unique: ParentAppliesToItem[] = [];
+    for (const item of items) {
+      const key = `${item.building ?? ''}\0${item.unit ?? ''}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      unique.push(item);
+    }
+    return unique;
   }
 
   hasSuggestion(row: ValidationRow): boolean {
@@ -139,9 +187,8 @@ export class ValidationResultTableComponent {
   }
 
   isAcceptDisabled(row: ValidationRow): boolean {
-    if (isIdentityBackfillRow(row)) {
-      return !this.correctionText(row);
-    }
+    // Accept-as-is suppression for backfilled parent rows removed on Heather's instruction (2026-09).
+    // Server remains the authority via ValidationController.cs:1027-1033.
     if (!row.isAmbiguousMultiParty) {
       return false;
     }
@@ -149,6 +196,9 @@ export class ValidationResultTableComponent {
   }
 
   overrideTriggerLabel(row: ValidationRow): string {
+    if (this.bucket === 'excluded') {
+      return 'Override';
+    }
     return this.showAcceptTick(row) ? 'Or type override' : 'Correct name';
   }
 
