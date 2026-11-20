@@ -1,4 +1,5 @@
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { MatButtonToggleChange } from '@angular/material/button-toggle';
 import { PageEvent } from '@angular/material/paginator';
 import { Subscription } from 'rxjs';
@@ -6,26 +7,44 @@ import { ValidationApiService } from './services/validation-api.service';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import {
   BatchValidationResult,
+  ClosedDealsMappedRow,
+  ClosedDealsValidationGroup,
   CorrectionChangeType,
   DownloadCorrectionsPayload,
   DraftDetail,
   DraftSummary,
+  FrontendStatus,
+  ClassifyStatus,
   MatchSource,
   ParentAppliesToItem,
   ParentValidationResult,
   ValidationHistory,
-  ValidationResult,
-  isIdentityBackfillRow
+  ValidationResult
 } from './models/validation.models';
 import {
   BucketKey,
   FieldType,
+  FIELD_TYPE_TAB_LABELS,
   OverridePopoverRequest,
   ValidationRow
 } from './validation-result-table.component';
 
+type DraftSaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'closed';
+
+interface AutosaveState {
+  dirty: boolean;
+  debounceTimer: ReturnType<typeof setTimeout> | null;
+  maxWaitTimer: ReturnType<typeof setTimeout> | null;
+  inFlight: boolean;
+  pending: boolean;
+  persisted: boolean;
+  consecutiveFailures: number;
+  disarmed: boolean;
+  lastSavedAt: Date | null;
+}
+
 interface PendingOverride {
-  fileIndex: number;
+  fileId: string;
   fieldType: FieldType;
   row: ValidationRow;
   top: number;
@@ -37,7 +56,7 @@ interface PendingOverride {
 
 export interface StoredCorrectionRecord {
   rowIndex: number;
-  fieldType: 'Tenant' | 'Parent';
+  fieldType: 'Tenant' | 'Parent' | 'ClosedDealsTenant';
   originalName: string;
   correctedName: string;
   changeType: CorrectionChangeType;
@@ -60,17 +79,20 @@ interface FieldGroupConfig {
   nameColumnLabel: string;
 }
 
+const ALL_FIELD_TYPES: readonly FieldType[] = ['tenant', 'parent', 'closedDealsTenant'];
+const ALL_BUCKET_KEYS: readonly BucketKey[] = ['new', 'flagged', 'suggested', 'excluded'];
+
 type BulkActionType = 'apply-all' | 'accept-as-is' | 'standardise';
 
 interface PendingBulkAction {
   type: BulkActionType;
-  fileIndex: number;
+  fileId: string;
   fieldType: FieldType;
   fieldLabel: string;
 }
 
 interface PendingAmbiguousNotice {
-  fileIndex: number;
+  fileId: string;
   fieldType: FieldType;
   rows: ValidationRow[];
 }
@@ -98,6 +120,9 @@ interface DownloadChecklistState {
 })
 export class ValidationComponent implements OnInit, OnDestroy {
   private static readonly DOWNLOAD_STEP_MS = 800;
+  private static readonly AUTOSAVE_DEBOUNCE_MS = 3000;
+  private static readonly AUTOSAVE_MAX_WAIT_MS = 30000;
+  private static readonly AUTOSAVE_FAILURE_THRESHOLD = 3;
 
   private static readonly BULK_CONFIRM_CONFIG: Record<BulkActionType, BulkConfirmConfig> = {
     'apply-all': {
@@ -120,27 +145,33 @@ export class ValidationComponent implements OnInit, OnDestroy {
     }
   };
 
-  private readonly downloadTimers = new Map<number, number[]>();
-  private readonly downloadSubscriptions = new Map<number, Subscription>();
-  private readonly downloadGeneration = new Map<number, number>();
+  private readonly downloadTimers = new Map<string, number[]>();
+  private readonly downloadSubscriptions = new Map<string, Subscription>();
+  private readonly downloadGeneration = new Map<string, number>();
 
   selectedFiles: File[] = [];
-  asOfDate: string = this.todayLocalIso();
   batchResults: BatchValidationResult[] = [];
   isLoading = false;
   errorMessage = '';
   isDragging = false;
 
-  expandedFiles = new Set<number>();
+  expandedFiles = new Set<string>();
   expandedFieldGroups = new Set<string>();
   expandedSections = new Set<string>();
   /** Active Tenant/Parent tab per file card. Not persisted to drafts. */
-  activeFieldTabByFile = new Map<number, FieldType>();
-  /** Page index/size per (fileIndex, fieldType, bucketKey). Not persisted to drafts. */
+  activeFieldTabByFile = new Map<string, FieldType>();
+  /** Page index/size per (fileId, fieldType, bucketKey). Not persisted to drafts. */
   bucketPageState = new Map<string, { pageIndex: number; pageSize: number }>();
+  /** Free-text filter per file card. View-only: bulk actions ignore it. */
+  searchTermByFile = new Map<string, string>();
   corrections = new Map<string, StoredCorrectionRecord>();
-  downloadProgressByFile = new Map<number, DownloadChecklistState>();
-  private draftSaveState = new Map();
+  downloadProgressByFile = new Map<string, DownloadChecklistState>();
+  private draftSaveState = new Map<string, DraftSaveStatus>();
+
+  private autosave = new Map<string, AutosaveState>();
+  private suppressAutosaveDirty = false;
+  private autosaveWarningIds = new Set<string>();
+  private visibilityChangeHandler: (() => void) | null = null;
 
   private autoAlignApplied = false;
 
@@ -151,6 +182,8 @@ export class ValidationComponent implements OnInit, OnDestroy {
   private correctionsVersion = 0;
   private readonly correctionMapCache = new Map<string, Map<string, string>>();
   private readonly correctionMapCacheVersion = new Map<string, number>();
+  private readonly changeTypeMapCache = new Map<string, Map<string, CorrectionChangeType>>();
+  private readonly changeTypeMapCacheVersion = new Map<string, number>();
   private readonly acceptedKeysCache = new Map<string, Set<string>>();
   private readonly acceptedKeysCacheVersion = new Map<string, number>();
   private readonly rowsForBucketCache = new Map<string, ValidationRow[]>();
@@ -177,6 +210,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     { key: 'suggested', label: '⚠️ Suggested', headerClass: 'bucket-header--suggested' },
     { key: 'excluded', label: '✅ Corrected', headerClass: 'bucket-header--correct' }
   ];
+  readonly fieldTypeTabLabels = FIELD_TYPE_TAB_LABELS;
 
   constructor(
     private validationApi: ValidationApiService,
@@ -185,18 +219,12 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadDrafts();
+    this.visibilityChangeHandler = () => this.onDocumentVisibilityChange();
+    document.addEventListener('visibilitychange', this.visibilityChangeHandler);
   }
 
   get canValidate(): boolean {
     return this.selectedFiles.length > 0 && !this.isLoading;
-  }
-
-  private todayLocalIso(): string {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
   }
 
   onFilesSelected(event: Event): void {
@@ -204,6 +232,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     const files = input.files;
     if (files && files.length > 0) {
       this.setFiles(Array.from(files));
+      input.value = '';
     }
   }
 
@@ -234,21 +263,34 @@ export class ValidationComponent implements OnInit, OnDestroy {
     }
 
     this.errorMessage = '';
-    this.selectedFiles = files;
+    this.selectedFiles = [...this.selectedFiles, ...files];
+    this.resetResultsState();
+  }
+
+  removeSelectedFile(index: number, fileInputEl?: HTMLInputElement): void {
+    this.selectedFiles = this.selectedFiles.filter((_, i) => i !== index);
+    this.errorMessage = '';
+    if (this.selectedFiles.length === 0 && fileInputEl) {
+      fileInputEl.value = '';
+    }
     this.resetResultsState();
   }
 
   private resetResultsState(): void {
     this.clearAllDownloadRuns();
+    this.clearAllAutosaveTimers();
+    this.autosave.clear();
+    this.autosaveWarningIds = new Set<string>();
     this.batchResults = [];
-    this.expandedFiles = new Set<number>();
+    this.expandedFiles = new Set<string>();
     this.expandedFieldGroups = new Set<string>();
     this.parentCopyConfirmed.clear();
     this.expandedSections = new Set<string>();
-    this.activeFieldTabByFile = new Map<number, FieldType>();
+    this.activeFieldTabByFile = new Map<string, FieldType>();
     this.bucketPageState = new Map<string, { pageIndex: number; pageSize: number }>();
+    this.searchTermByFile = new Map<string, string>();
     this.corrections = new Map<string, StoredCorrectionRecord>();
-    this.downloadProgressByFile = new Map<number, DownloadChecklistState>();
+    this.downloadProgressByFile = new Map<string, DownloadChecklistState>();
     this.draftSaveState.clear();
     this.autoAlignApplied = false;
     this.bumpCorrectionsCache();
@@ -256,16 +298,162 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   clearBatch(fileInput?: HTMLInputElement): void {
+    const persistedIds: string[] = [];
+    this.batchResults.forEach(result => {
+      const state = this.autosave.get(result.fileId);
+      if (state?.persisted && !state.disarmed) {
+        persistedIds.push(result.fileId);
+      }
+    });
+
+    if (persistedIds.length > 0) {
+      const confirmed = window.confirm(
+        'Clear this file? Your auto-saved draft will be permanently removed.'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    this.batchResults.forEach(result => {
+      const state = this.autosave.get(result.fileId);
+      if (state?.persisted && !state.disarmed) {
+        this.clearAutosaveTimersById(result.fileId);
+        state.disarmed = true;
+      }
+    });
+
     this.resetResultsState();
     this.selectedFiles = [];
     this.errorMessage = '';
     if (fileInput) {
       fileInput.value = '';
     }
+
+    if (persistedIds.length === 0) {
+      return;
+    }
+
+    let remaining = persistedIds.length;
+    const finishOne = (): void => {
+      remaining--;
+      if (remaining <= 0) {
+        this.loadDrafts();
+      }
+    };
+    persistedIds.forEach(fileId => {
+      this.validationApi.clearDraft(fileId).subscribe({
+        next: () => finishOne(),
+        error: err => {
+          console.warn('clearDraft failed', fileId, err);
+          finishOne();
+        }
+      });
+    });
+  }
+
+  removeValidatedFile(fileIndex: number, fileInput?: HTMLInputElement): void {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+
+    const autosaveState = this.autosave.get(fileId);
+    const hasPersistedDraft = !!autosaveState?.persisted && !autosaveState.disarmed;
+    if (hasPersistedDraft) {
+      const confirmed = window.confirm(
+        'Remove this file? Your auto-saved draft will be permanently removed.'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    this.clearAutosaveTimersById(fileId);
+    this.disarmAutosaveById(fileId);
+    this.clearDownloadRunById(fileId);
+
+    this.autosave.delete(fileId);
+    this.draftSaveState.delete(fileId);
+    this.downloadTimers.delete(fileId);
+    this.downloadSubscriptions.delete(fileId);
+    this.downloadGeneration.delete(fileId);
+    this.downloadProgressByFile.delete(fileId);
+    this.expandedFiles.delete(fileId);
+    this.activeFieldTabByFile.delete(fileId);
+    this.searchTermByFile.delete(fileId);
+    this.autosaveWarningIds.delete(fileId);
+    this.parentCopyConfirmed.delete(fileId);
+    this.deleteKeysForFile(this.expandedFieldGroups, fileId);
+    this.deleteKeysForFile(this.expandedSections, fileId);
+    this.deleteKeysForFile(this.bucketPageState, fileId);
+    this.deleteKeysForFile(this.corrections, fileId);
+    this.deleteKeysForFile(this.correctionMapCache, fileId);
+    this.deleteKeysForFile(this.correctionMapCacheVersion, fileId);
+    this.deleteKeysForFile(this.changeTypeMapCache, fileId);
+    this.deleteKeysForFile(this.changeTypeMapCacheVersion, fileId);
+    this.deleteKeysForFile(this.acceptedKeysCache, fileId);
+    this.deleteKeysForFile(this.acceptedKeysCacheVersion, fileId);
+    this.deleteKeysForFile(this.rowsForBucketCache, fileId);
+    this.bumpCorrectionsCache();
+
+    if (this.pendingOverride?.fileId === fileId) {
+      this.pendingOverride = null;
+    }
+    if (this.pendingBulkAction?.fileId === fileId) {
+      this.pendingBulkAction = null;
+    }
+    if (this.pendingAmbiguousNotice?.fileId === fileId) {
+      this.pendingAmbiguousNotice = null;
+    }
+
+    this.selectedFiles = this.selectedFiles.filter((_, i) => i !== fileIndex);
+    this.batchResults = this.batchResults.filter((_, i) => i !== fileIndex);
+
+    if (hasPersistedDraft) {
+      this.validationApi.clearDraft(fileId).subscribe({
+        next: () => this.loadDrafts(),
+        error: err => {
+          console.warn('clearDraft failed', fileId, err);
+          this.loadDrafts();
+        }
+      });
+    }
+
+    if (this.batchResults.length === 0) {
+      this.resetResultsState();
+      this.selectedFiles = [];
+      this.errorMessage = '';
+      if (fileInput) {
+        fileInput.value = '';
+      }
+    }
+  }
+
+  private deleteKeysForFile(store: { keys(): IterableIterator<string>; delete(key: string): unknown }, fileId: string): void {
+    for (const key of Array.from(store.keys())) {
+      if (this.keyBelongsToFile(key, fileId)) {
+        store.delete(key);
+      }
+    }
+  }
+
+  private keyBelongsToFile(key: string, fileId: string): boolean {
+    return key === fileId
+      || key.startsWith(`${fileId}|`)
+      || key.startsWith(`${fileId}-`)
+      || key.startsWith(`paged|${fileId}|`)
+      || key.startsWith(`searched|${fileId}|`)
+      || key.startsWith(`display|${fileId}|`);
   }
 
   ngOnDestroy(): void {
     this.clearAllDownloadRuns();
+    this.clearAllAutosaveTimers();
+    if (this.visibilityChangeHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
+      this.visibilityChangeHandler = null;
+    }
   }
 
   validate(): void {
@@ -277,10 +465,16 @@ export class ValidationComponent implements OnInit, OnDestroy {
     this.errorMessage = '';
     this.resetResultsState();
 
-    this.validationApi.validateBatch(this.selectedFiles, this.asOfDate).subscribe({
+    this.validationApi.validateBatch(this.selectedFiles).subscribe({
       next: (results) => {
         this.batchResults = results;
         this.autoStageAlignments();
+        results.forEach((result, fileIndex) => {
+          this.ensureAutosaveStateById(result.fileId);
+          const state = this.autosave.get(result.fileId)!;
+          state.dirty = true;
+          this.flushAutosave(fileIndex);
+        });
         this.isLoading = false;
         this.loadHistory();
       },
@@ -296,22 +490,35 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   toggleFile(fileIndex: number): void {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
     const set = new Set(this.expandedFiles);
-    if (set.has(fileIndex)) {
-      set.delete(fileIndex);
+    if (set.has(fileId)) {
+      set.delete(fileId);
     } else {
-      set.add(fileIndex);
+      set.add(fileId);
     }
     this.expandedFiles = set;
   }
 
   isFileExpanded(fileIndex: number): boolean {
-    return this.expandedFiles.has(fileIndex);
+    const fileId = this.resolveFileId(fileIndex);
+    return fileId != null && this.expandedFiles.has(fileId);
+  }
+
+  isAutosaveWarning(fileIndex: number): boolean {
+    const fileId = this.resolveFileId(fileIndex);
+    return fileId != null && this.autosaveWarningIds.has(fileId);
   }
 
   toggleFieldGroup(fileIndex: number, fieldType: FieldType, event?: Event): void {
     event?.stopPropagation();
-    const key = `${fileIndex}-group-${fieldType}`;
+    const key = this.fieldGroupExpandKey(fileIndex, fieldType);
+    if (key == null) {
+      return;
+    }
     const set = new Set(this.expandedFieldGroups);
     if (set.has(key)) {
       set.delete(key);
@@ -322,12 +529,16 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   isFieldGroupExpanded(fileIndex: number, fieldType: FieldType): boolean {
-    return this.expandedFieldGroups.has(`${fileIndex}-group-${fieldType}`);
+    const key = this.fieldGroupExpandKey(fileIndex, fieldType);
+    return key != null && this.expandedFieldGroups.has(key);
   }
 
   toggleSection(fileIndex: number, fieldType: FieldType, bucket: BucketKey, event?: Event): void {
     event?.stopPropagation();
-    const key = `${fileIndex}-${fieldType}-${bucket}`;
+    const key = this.sectionExpandKey(fileIndex, fieldType, bucket);
+    if (key == null) {
+      return;
+    }
     const set = new Set(this.expandedSections);
     if (set.has(key)) {
       set.delete(key);
@@ -338,22 +549,74 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   isSectionExpanded(fileIndex: number, fieldType: FieldType, bucket: BucketKey): boolean {
-    return this.expandedSections.has(`${fileIndex}-${fieldType}-${bucket}`);
+    const key = this.sectionExpandKey(fileIndex, fieldType, bucket);
+    return key != null && this.expandedSections.has(key);
   }
 
   hasParentResponse(fileIndex: number): boolean {
     return this.batchResults[fileIndex]?.parentResponse != null;
   }
 
-  private parentCopyConfirmed = new Set<number>();
+  hasClosedDealsResponse(fileIndex: number): boolean {
+    return this.batchResults[fileIndex]?.closedDealsResponse != null;
+  }
+
+  /**
+   * FAILED is `error` present. Must be consulted before groups, counters,
+   * or bucket construction — FAILED sends total/status 0 and empty groups.
+   */
+  isClosedDealsFailed(fileIndex: number): boolean {
+    const cd = this.batchResults[fileIndex]?.closedDealsResponse;
+    if (cd == null) {
+      return false;
+    }
+    return cd.error != null;
+  }
+
+  closedDealsFailureMessage(fileIndex: number): string {
+    const message = this.batchResults[fileIndex]?.closedDealsResponse?.error?.message;
+    const trimmed = (message ?? '').trim();
+    return trimmed.length > 0 ? trimmed : 'Closed Deals could not be parsed.';
+  }
+
+  isFieldToggleDisabled(fileIndex: number, type: FieldType): boolean {
+    return type === 'parent' && !this.hasParentResponse(fileIndex);
+  }
+
+  fieldToggleDisabledReason(fileIndex: number, type: FieldType): string {
+    if (this.isFieldToggleDisabled(fileIndex, type)) {
+      return 'No parent data in this file';
+    }
+    return '';
+  }
+
+  fieldToggleLabel(fileIndex: number, type: FieldType): string {
+    if (type === 'closedDealsTenant' && this.isClosedDealsFailed(fileIndex)) {
+      return `${this.fieldTypeTabLabels[type]} — failed`;
+    }
+    return `${this.fieldTypeTabLabels[type]} (${this.fieldGroupRowCount(fileIndex, type)})`;
+  }
+
+  fieldToggleTypesFor(fileIndex: number): readonly FieldType[] {
+    return this.hasClosedDealsResponse(fileIndex)
+      ? ALL_FIELD_TYPES
+      : ['tenant', 'parent'];
+  }
+
+  private parentCopyConfirmed = new Set<string>();
 
   isParentCopyPending(fileIndex: number): boolean {
     const pr = this.batchResults[fileIndex]?.parentResponse;
-    return !!pr?.isCopiedFromTenant && !this.parentCopyConfirmed.has(fileIndex);
+    const fileId = this.resolveFileId(fileIndex);
+    return !!pr?.isCopiedFromTenant && !(fileId != null && this.parentCopyConfirmed.has(fileId));
   }
 
   confirmParentCopy(fileIndex: number): void {
-    this.parentCopyConfirmed.add(fileIndex);
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+    this.parentCopyConfirmed.add(fileId);
   }
 
   cancelParentCopy(fileIndex: number, event?: Event): void {
@@ -362,34 +625,64 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   fieldGroupsFor(fileIndex: number): FieldGroupConfig[] {
-    const groups: FieldGroupConfig[] = [
-      { type: 'tenant', label: 'Tenant names', nameColumnLabel: 'Source Tenant Name' }
-    ];
-    if (this.hasParentResponse(fileIndex)) {
-      groups.push({ type: 'parent', label: 'Parent names', nameColumnLabel: 'Source Parent Name' });
-    }
-    return groups;
+    return this.fieldToggleTypesFor(fileIndex).map(type => this.fieldGroupConfig(type));
   }
 
   fieldGroupConfig(fieldType: FieldType): FieldGroupConfig {
-    return fieldType === 'parent'
-      ? { type: 'parent', label: 'Parent names', nameColumnLabel: 'Source Parent Name' }
-      : { type: 'tenant', label: 'Tenant names', nameColumnLabel: 'Source Tenant Name' };
+    if (fieldType === 'parent') {
+      return {
+        type: 'parent',
+        label: FIELD_TYPE_TAB_LABELS.parent,
+        nameColumnLabel: 'Source Parent Name'
+      };
+    }
+    if (fieldType === 'closedDealsTenant') {
+      return {
+        type: 'closedDealsTenant',
+        label: FIELD_TYPE_TAB_LABELS.closedDealsTenant,
+        nameColumnLabel: 'Source CD Tenant Name'
+      };
+    }
+    return {
+      type: 'tenant',
+      label: FIELD_TYPE_TAB_LABELS.tenant,
+      nameColumnLabel: 'Source Tenant Name'
+    };
   }
 
   activeFieldType(fileIndex: number): FieldType {
-    const tab = this.activeFieldTabByFile.get(fileIndex) ?? 'tenant';
-    return tab === 'parent' && this.hasParentResponse(fileIndex) ? 'parent' : 'tenant';
+    const fileId = this.resolveFileId(fileIndex);
+    const tab = (fileId != null ? this.activeFieldTabByFile.get(fileId) : undefined) ?? 'tenant';
+    if (tab === 'closedDealsTenant') {
+      return this.hasClosedDealsResponse(fileIndex) ? 'closedDealsTenant' : 'tenant';
+    }
+    if (tab === 'parent' && this.hasParentResponse(fileIndex)) {
+      return 'parent';
+    }
+    return 'tenant';
   }
 
   onFieldToggleChange(fileIndex: number, event: MatButtonToggleChange): void {
-    const type = event.value === 'parent' ? 'parent' : 'tenant';
+    let type: FieldType;
+    if (event.value === 'closedDealsTenant') {
+      type = 'closedDealsTenant';
+    } else if (event.value === 'parent') {
+      type = 'parent';
+    } else if (event.value === 'tenant') {
+      type = 'tenant';
+    } else {
+      return;
+    }
     this.setActiveFieldTab(fileIndex, type);
   }
 
   private setActiveFieldTab(fileIndex: number, fieldType: FieldType): void {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
     const map = new Map(this.activeFieldTabByFile);
-    map.set(fileIndex, fieldType);
+    map.set(fileId, fieldType);
     this.activeFieldTabByFile = map;
   }
 
@@ -400,8 +693,55 @@ export class ValidationComponent implements OnInit, OnDestroy {
     );
   }
 
+  private fieldGroupExpandKey(fileIndex: number, fieldType: FieldType): string | null {
+    const fileId = this.resolveFileId(fileIndex);
+    return fileId == null ? null : `${fileId}-group-${fieldType}`;
+  }
+
+  private sectionExpandKey(fileIndex: number, fieldType: FieldType, bucket: BucketKey): string | null {
+    const fileId = this.resolveFileId(fileIndex);
+    return fileId == null ? null : `${fileId}-${fieldType}-${bucket}`;
+  }
+
   private pageStateKey(fileIndex: number, fieldType: FieldType, bucket: BucketKey): string {
-    return `${fileIndex}|${fieldType}|${bucket}`;
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return `__unresolved:${fileIndex}|${fieldType}|${bucket}`;
+    }
+    return `${fileId}|${fieldType}|${bucket}`;
+  }
+
+  /**
+   * Resolves a display-position fileIndex to the stable fileId for that file.
+   * fileIndex is a positional handle only — it shifts when files are added or
+   * removed. All session state (corrections, autosave, caches) is being
+   * migrated to key off the returned fileId instead. Returns null when the
+   * index does not resolve, matching the existing `if (!file || !batchResult)`
+   * guard convention used by saveDraft / downloadFile / flushAutosave.
+   */
+  private resolveFileId(fileIndex: number): string | null {
+    return this.batchResults[fileIndex]?.fileId ?? null;
+  }
+
+  private indexOfFileId(fileId: string): number {
+    return this.batchResults.findIndex(result => result.fileId === fileId);
+  }
+
+  private locateByFileId(fileId: string): {
+    fileIndex: number;
+    file: File;
+    batchResult: BatchValidationResult;
+  } | null {
+    const fileIndex = this.indexOfFileId(fileId);
+    if (fileIndex < 0) {
+      return null;
+    }
+    const file = this.selectedFiles[fileIndex];
+    const batchResult = this.batchResults[fileIndex];
+    if (!file || !batchResult) {
+      return null;
+    }
+    return { fileIndex, file, batchResult };
   }
 
   pageIndexFor(fileIndex: number, fieldType: FieldType, bucket: BucketKey): number {
@@ -423,6 +763,9 @@ export class ValidationComponent implements OnInit, OnDestroy {
     bucket: BucketKey,
     event: PageEvent
   ): void {
+    if (this.resolveFileId(fileIndex) == null) {
+      return;
+    }
     this.invalidatePagedSliceCache(fileIndex, fieldType, bucket);
     const map = new Map(this.bucketPageState);
     map.set(this.pageStateKey(fileIndex, fieldType, bucket), {
@@ -441,19 +784,58 @@ export class ValidationComponent implements OnInit, OnDestroy {
     fieldType: FieldType,
     key: BucketKey
   ): ValidationRow[] {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return [];
+    }
     const pageIndex = this.pageIndexFor(fileIndex, fieldType, key);
     const pageSize = this.pageSizeFor(fileIndex, fieldType, key);
-    const cacheKey = `paged|${fileIndex}|${fieldType}|${key}|${pageIndex}|${pageSize}`;
+    const cacheKey = this.pagedRowsCacheKey(fileId, fieldType, key, pageIndex, pageSize);
     const cached = this.rowsForBucketCache.get(cacheKey);
     if (cached) {
       return cached;
     }
 
-    const all = this.rowsForDisplayBucket(fileIndex, fieldType, key);
+    const all = this.rowsForSearchedDisplayBucket(fileIndex, fieldType, key);
     const start = pageIndex * pageSize;
     const rows = all.slice(start, start + pageSize);
     this.rowsForBucketCache.set(cacheKey, rows);
     return rows;
+  }
+
+  private pagedRowsCacheKey(
+    fileId: string,
+    fieldType: FieldType,
+    key: BucketKey,
+    pageIndex: number,
+    pageSize: number
+  ): string {
+    return `paged|${fileId}|${fieldType}|${key}|${pageIndex}|${pageSize}`;
+  }
+
+  private pagedRowsCachePrefix(fileId: string, fieldType: FieldType, bucket: BucketKey): string {
+    return `paged|${fileId}|${fieldType}|${bucket}|`;
+  }
+
+  private searchedRowsCachePrefix(fileId: string, fieldType: FieldType, bucket: BucketKey): string {
+    return `searched|${fileId}|${fieldType}|${bucket}|`;
+  }
+
+  private searchedRowsCacheKey(
+    fileId: string,
+    fieldType: FieldType,
+    key: BucketKey,
+    term: string
+  ): string {
+    return `searched|${fileId}|${fieldType}|${key}|${term}`;
+  }
+
+  private displayRowsCacheKey(fileId: string, fieldType: FieldType, key: BucketKey): string {
+    return `display|${fileId}|${fieldType}|${key}`;
+  }
+
+  private bucketRowsCacheKey(fileId: string, fieldType: FieldType, bucket: BucketKey): string {
+    return `${fileId}|${fieldType}|${bucket}`;
   }
 
   private invalidatePagedSliceCache(
@@ -461,7 +843,11 @@ export class ValidationComponent implements OnInit, OnDestroy {
     fieldType: FieldType,
     bucket: BucketKey
   ): void {
-    const prefix = `paged|${fileIndex}|${fieldType}|${bucket}|`;
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+    const prefix = this.pagedRowsCachePrefix(fileId, fieldType, bucket);
     for (const key of Array.from(this.rowsForBucketCache.keys())) {
       if (key.startsWith(prefix)) {
         this.rowsForBucketCache.delete(key);
@@ -469,8 +855,57 @@ export class ValidationComponent implements OnInit, OnDestroy {
     }
   }
 
+  private invalidateSearchedSliceCache(
+    fileIndex: number,
+    fieldType: FieldType,
+    bucket: BucketKey
+  ): void {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+    const prefix = this.searchedRowsCachePrefix(fileId, fieldType, bucket);
+    for (const key of Array.from(this.rowsForBucketCache.keys())) {
+      if (key.startsWith(prefix)) {
+        this.rowsForBucketCache.delete(key);
+      }
+    }
+  }
+
+  searchTermFor(fileIndex: number): string {
+    const fileId = this.resolveFileId(fileIndex);
+    return (fileId != null ? this.searchTermByFile.get(fileId) : undefined) ?? '';
+  }
+
+  onSearchTermChange(fileIndex: number, term: string): void {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+    const terms = new Map(this.searchTermByFile);
+    terms.set(fileId, term ?? '');
+    this.searchTermByFile = terms;
+
+    const pages = new Map(this.bucketPageState);
+    for (const fieldType of ALL_FIELD_TYPES) {
+      for (const bucket of ALL_BUCKET_KEYS) {
+        this.invalidatePagedSliceCache(fileIndex, fieldType, bucket);
+        this.invalidateSearchedSliceCache(fileIndex, fieldType, bucket);
+        pages.set(this.pageStateKey(fileIndex, fieldType, bucket), {
+          pageIndex: 0,
+          pageSize: this.pageSizeFor(fileIndex, fieldType, bucket)
+        });
+      }
+    }
+    this.bucketPageState = pages;
+  }
+
   rowsForBucket(fileIndex: number, fieldType: FieldType, bucket: BucketKey): ValidationRow[] {
-    const cacheKey = `${fileIndex}|${fieldType}|${bucket}`;
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return [];
+    }
+    const cacheKey = this.bucketRowsCacheKey(fileId, fieldType, bucket);
     const cached = this.rowsForBucketCache.get(cacheKey);
     if (cached) {
       return cached;
@@ -482,16 +917,68 @@ export class ValidationComponent implements OnInit, OnDestroy {
     }
 
     let rows: ValidationRow[];
-    if (fieldType === 'tenant') {
+    if (fieldType === 'closedDealsTenant') {
+      if (this.isClosedDealsFailed(fileIndex)) {
+        rows = [];
+      } else {
+        const groups = result.closedDealsResponse?.groups ?? [];
+        rows = groups
+          .map(group => this.mapClosedDealsGroup(group))
+          .filter(r => r.status === bucket);
+      }
+    } else if (fieldType === 'tenant') {
       rows = result.response.results.filter(r => r.status === bucket);
-    } else if (!result.parentResponse) {
-      rows = [];
+    } else if (fieldType === 'parent') {
+      if (!result.parentResponse) {
+        rows = [];
+      } else {
+        rows = result.parentResponse.results.filter(r => r.status === bucket);
+      }
     } else {
-      rows = result.parentResponse.results.filter(r => r.status === bucket);
+      rows = [];
     }
 
     this.rowsForBucketCache.set(cacheKey, rows);
     return rows;
+  }
+
+  private mapClosedDealsGroup(group: ClosedDealsValidationGroup): ClosedDealsMappedRow {
+    const rowIndexes = Array.isArray(group.rowIndexes) ? [...group.rowIndexes] : [];
+    const building = group.building ?? '';
+    const unit = group.unit ?? '';
+    return {
+      rowIndex: rowIndexes[0] ?? 0,
+      propertyId: '',
+      unitId: unit,
+      tenantName: group.tenantName ?? '',
+      targetName: group.suggestedName || group.tenantName || '',
+      buildingName: building,
+      leaseStart: '',
+      status: group.status as FrontendStatus,
+      classifyStatus: group.classifyStatus as ClassifyStatus,
+      suggestion: group.suggestion,
+      matchSource: group.matchSource,
+      suggestedName: group.suggestedName || null,
+      confidence: group.confidence,
+      reason: group.reason ?? '',
+      isAmbiguousMultiParty: !!group.isAmbiguousMultiParty,
+      appliesTo: rowIndexes.map(() => ({ building, unit })),
+      rowIndexes
+    };
+  }
+
+  private uniqueAppliesTo(items: ParentAppliesToItem[]): ParentAppliesToItem[] {
+    const seen = new Set<string>();
+    const unique: ParentAppliesToItem[] = [];
+    for (const item of items) {
+      const key = `${item.building ?? ''}\0${item.unit ?? ''}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      unique.push(item);
+    }
+    return unique;
   }
 
   private isVacantRow(row: ValidationRow): boolean {
@@ -504,7 +991,11 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   rowsForDisplayBucket(fileIndex: number, fieldType: FieldType, key: BucketKey): ValidationRow[] {
-    const cacheKey = `display|${fileIndex}|${fieldType}|${key}`;
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return [];
+    }
+    const cacheKey = this.displayRowsCacheKey(fileId, fieldType, key);
     const cached = this.rowsForBucketCache.get(cacheKey);
     if (cached) {
       return cached;
@@ -524,6 +1015,65 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return rows;
   }
 
+  /**
+   * Display bucket narrowed by the card's search term. View-only: bulk actions,
+   * counts and the download payload must keep calling rowsForDisplayBucket.
+   */
+  rowsForSearchedDisplayBucket(
+    fileIndex: number,
+    fieldType: FieldType,
+    key: BucketKey
+  ): ValidationRow[] {
+    const all = this.rowsForDisplayBucket(fileIndex, fieldType, key);
+    const term = this.searchTermFor(fileIndex).trim().toLowerCase();
+    if (!term) {
+      return all;
+    }
+
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return [];
+    }
+    const cacheKey = this.searchedRowsCacheKey(fileId, fieldType, key, term);
+    const cached = this.rowsForBucketCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const rows = all.filter(row => this.matchesSearch(row, fieldType, term));
+    this.rowsForBucketCache.set(cacheKey, rows);
+    return rows;
+  }
+
+  /** Matching rows across every display bucket. Mirrors fieldGroupRowCount, search-aware. */
+  searchedFieldGroupRowCount(fileIndex: number, fieldType: FieldType): number {
+    return this.displayBuckets.reduce(
+      (sum, bucket) =>
+        sum + this.rowsForSearchedDisplayBucket(fileIndex, fieldType, bucket.key).length,
+      0
+    );
+  }
+
+  private matchesSearch(row: ValidationRow, fieldType: FieldType, term: string): boolean {
+    const needle = (term ?? '').trim().toLowerCase();
+    if (!needle) {
+      return true;
+    }
+
+    if ((row?.tenantName ?? '').toLowerCase().includes(needle)) {
+      return true;
+    }
+
+    if (fieldType === 'tenant' || fieldType === 'closedDealsTenant') {
+      return ((row as ValidationResult)?.unitId ?? '').toLowerCase().includes(needle);
+    }
+    if (fieldType === 'parent') {
+      const appliesTo = (row as ParentValidationResult)?.appliesTo ?? [];
+      return appliesTo.some(item => (item?.unit ?? '').toLowerCase().includes(needle));
+    }
+    return false;
+  }
+
   private clearRowsForBucketCache(): void {
     this.rowsForBucketCache.clear();
   }
@@ -533,13 +1083,28 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   acceptedCount(fileIndex: number): number {
-    const prefix = `${fileIndex}|`;
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return 0;
+    }
+    const prefix = `${fileId}|`;
     let count = 0;
     this.corrections.forEach((_, key) => {
       if (key.startsWith(prefix)) {
         count++;
       }
     });
+    return count;
+  }
+
+  exactMatchCount(fileIndex: number): number {
+    let count = 0;
+    const type = this.activeFieldType(fileIndex);
+    for (const row of this.rowsForDisplayBucket(fileIndex, type, 'excluded')) {
+      if (!this.isDivergentFromMaster(row)) {
+        count++;
+      }
+    }
     return count;
   }
 
@@ -587,8 +1152,34 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return map;
   }
 
+  tableChangeTypeMap(fileIndex: number, fieldType: FieldType): Map<string, CorrectionChangeType> {
+    const cacheKey = this.tableCacheKey(fileIndex, fieldType);
+    const cachedVersion = this.changeTypeMapCacheVersion.get(cacheKey);
+    if (cachedVersion === this.correctionsVersion) {
+      const cached = this.changeTypeMapCache.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
+    const prefix = this.tableKeyPrefix(fileIndex, fieldType);
+    const map = new Map<string, CorrectionChangeType>();
+    this.corrections.forEach((record, key) => {
+      if (key.startsWith(prefix)) {
+        map.set(key.slice(prefix.length), record.changeType);
+      }
+    });
+    this.changeTypeMapCache.set(cacheKey, map);
+    this.changeTypeMapCacheVersion.set(cacheKey, this.correctionsVersion);
+    return map;
+  }
+
   private tableCacheKey(fileIndex: number, fieldType: FieldType): string {
-    return `${fileIndex}|${fieldType}`;
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return `__unresolved:${fileIndex}|${fieldType}`;
+    }
+    return `${fileId}|${fieldType}`;
   }
 
   private bumpCorrectionsCache(): void {
@@ -605,15 +1196,18 @@ export class ValidationComponent implements OnInit, OnDestroy {
     fieldType: FieldType,
     request: OverridePopoverRequest
   ): void {
-    const correctionMap = this.tableCorrectionMap(fileIndex, fieldType);
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
     this.pendingOverride = {
-      fileIndex,
+      fileId,
       fieldType,
       row: request.row,
       top: request.top,
       left: request.left,
       originalName: request.row.tenantName,
-      initialValue: correctionMap.get(this.tableRowKey(fieldType, request.row)) ?? '',
+      initialValue: this.effectiveCorrectionValue(fileIndex, fieldType, request.row),
       placeholder: request.placeholder
     };
   }
@@ -622,8 +1216,13 @@ export class ValidationComponent implements OnInit, OnDestroy {
     if (!this.pendingOverride) {
       return;
     }
-    const { fileIndex, fieldType, row } = this.pendingOverride;
-    this.setManualCorrection(fileIndex, fieldType, row, value);
+    const { fileId, fieldType, row } = this.pendingOverride;
+    const currentIndex = this.indexOfFileId(fileId);
+    if (currentIndex < 0) {
+      this.pendingOverride = null;
+      return;
+    }
+    this.setManualCorrection(currentIndex, fieldType, row, value);
     this.pendingOverride = null;
   }
 
@@ -640,7 +1239,11 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   private tableKeyPrefix(fileIndex: number, fieldType: FieldType): string {
-    return `${fileIndex}|${fieldType}|`;
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return `__unresolved:${fileIndex}|${fieldType}|`;
+    }
+    return `${fileId}|${fieldType}|`;
   }
 
   hasSuggestion(row: ValidationRow): boolean {
@@ -682,7 +1285,14 @@ export class ValidationComponent implements OnInit, OnDestroy {
     event: Event
   ): void {
     event.stopPropagation();
-    this.pendingBulkAction = { type, fileIndex, fieldType, fieldLabel };
+    if (fieldType === 'closedDealsTenant' && this.isClosedDealsFailed(fileIndex)) {
+      return;
+    }
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+    this.pendingBulkAction = { type, fileId, fieldType, fieldLabel };
   }
 
   cancelBulkAction(): void {
@@ -695,8 +1305,12 @@ export class ValidationComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const { type, fileIndex, fieldType } = pending;
+    const { type, fileId, fieldType } = pending;
     this.pendingBulkAction = null;
+    const fileIndex = this.indexOfFileId(fileId);
+    if (fileIndex < 0) {
+      return;
+    }
 
     switch (type) {
       case 'apply-all':
@@ -735,7 +1349,6 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return this.rowsForDisplayBucket(fileIndex, fieldType, 'new')
       .filter(row =>
         !row.isAmbiguousMultiParty
-        && !isIdentityBackfillRow(row)
         && !acceptedKeys.has(this.tableRowKey(fieldType, row)))
       .length;
   }
@@ -750,9 +1363,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   noticeReason(row: ValidationRow): string {
-    return row.isAmbiguousMultiParty
-      ? 'Ambiguous name'
-      : 'Parent filled from tenant name';
+    return 'Ambiguous name';
   }
 
   noticeUnit(row: ValidationRow): string {
@@ -777,6 +1388,13 @@ export class ValidationComponent implements OnInit, OnDestroy {
     if (!this.pendingAmbiguousNotice) {
       return [];
     }
+    if (this.pendingAmbiguousNotice.fieldType === 'closedDealsTenant') {
+      const cd = row as ClosedDealsMappedRow;
+      if (cd.appliesTo?.length) {
+        return this.uniqueAppliesTo(cd.appliesTo);
+      }
+      return [{ building: cd.buildingName, unit: cd.unitId }];
+    }
     if (this.pendingAmbiguousNotice.fieldType === 'tenant') {
       const tenant = row as ValidationResult;
       if (tenant.appliesTo?.length) {
@@ -784,7 +1402,10 @@ export class ValidationComponent implements OnInit, OnDestroy {
       }
       return [{ building: tenant.buildingName, unit: tenant.unitId }];
     }
-    return (row as ParentValidationResult).appliesTo ?? [];
+    if (this.pendingAmbiguousNotice.fieldType === 'parent') {
+      return (row as ParentValidationResult).appliesTo ?? [];
+    }
+    return [];
   }
 
   applyAllSuggestionsCount(fileIndex: number, fieldType: FieldType): number {
@@ -822,6 +1443,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     this.batchResults.forEach((_, fileIndex) => {
       this.autoStageForField(fileIndex, 'tenant');
       this.autoStageForField(fileIndex, 'parent');
+      this.autoStageForField(fileIndex, 'closedDealsTenant');
     });
     this.autoAlignApplied = true;
   }
@@ -858,19 +1480,22 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   private executeAcceptAllAsIs(fileIndex: number, fieldType: FieldType): void {
+    // Backfill identity exclusion removed on Heather's instruction (2026-09).
+    // Server remains the authority via ValidationController.cs:1027-1033.
     for (const row of this.rowsForDisplayBucket(fileIndex, fieldType, 'new')) {
-      if (row.isAmbiguousMultiParty || isIdentityBackfillRow(row)) {
+      if (row.isAmbiguousMultiParty) {
         continue;
       }
       this.acceptRow(fileIndex, fieldType, row);
     }
 
     const ambiguous = this.ambiguousNewRows(fileIndex, fieldType);
-    const identityBackfill = this.rowsForDisplayBucket(fileIndex, fieldType, 'new')
-      .filter(row => !row.isAmbiguousMultiParty && isIdentityBackfillRow(row));
-    const blocked = [...ambiguous, ...identityBackfill];
-    if (blocked.length > 0) {
-      this.pendingAmbiguousNotice = { fileIndex, fieldType, rows: blocked };
+    if (ambiguous.length > 0) {
+      const fileId = this.resolveFileId(fileIndex);
+      if (fileId == null) {
+        return;
+      }
+      this.pendingAmbiguousNotice = { fileId, fieldType, rows: ambiguous };
     }
   }
 
@@ -899,16 +1524,34 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   setManualCorrection(fileIndex: number, fieldType: FieldType, row: ValidationRow, value: string): void {
-    if (value?.trim()) {
-      this.setCorrection(fileIndex, fieldType, row, {
-        correctedName: value.trim(),
-        changeType: 'ManualOverride',
-        confidence: null,
-        matchSource: null
-      });
-    } else {
-      this.clearCorrection(fileIndex, fieldType, row);
+    if (value === this.effectiveCorrectionValue(fileIndex, fieldType, row)) {
+      return;
     }
+    if (!value?.trim()) {
+      return;
+    }
+    this.setCorrection(fileIndex, fieldType, row, {
+      correctedName: value.trim(),
+      changeType: 'ManualOverride',
+      confidence: null,
+      matchSource: 'ManualOverride'
+    });
+  }
+
+  private effectiveCorrectionValue(
+    fileIndex: number,
+    fieldType: FieldType,
+    row: ValidationRow
+  ): string {
+    const stored = this.corrections.get(this.correctionKey(fileIndex, fieldType, row));
+    return stored ? stored.correctedName : this.sourceNameForField(fieldType, row);
+  }
+
+  private sourceNameForField(fieldType: FieldType, row: ValidationRow): string {
+    if (fieldType === 'parent') {
+      return (row as ParentValidationResult).tenantName;
+    }
+    return row.tenantName;
   }
 
   clearCorrection(fileIndex: number, fieldType: FieldType, row: ValidationRow): void {
@@ -916,11 +1559,25 @@ export class ValidationComponent implements OnInit, OnDestroy {
     map.delete(this.correctionKey(fileIndex, fieldType, row));
     this.corrections = map;
     this.bumpCorrectionsCache();
+    if (!this.suppressAutosaveDirty) {
+      this.markAutosaveDirty(fileIndex);
+    }
   }
 
   private correctionKey(fileIndex: number, fieldType: FieldType, row: ValidationRow): string {
-    const scope = fieldType === 'tenant' ? 'tenant' : 'parent';
-    return `${fileIndex}|${scope}|${row.rowIndex}`;
+    let scope: string;
+    if (fieldType === 'closedDealsTenant') {
+      scope = 'closedDealsTenant';
+    } else if (fieldType === 'parent') {
+      scope = 'parent';
+    } else {
+      scope = 'tenant';
+    }
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return `__unresolved:${fileIndex}|${scope}|${row.rowIndex}`;
+    }
+    return `${fileId}|${scope}|${row.rowIndex}`;
   }
 
   private setCorrection(
@@ -937,7 +1594,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
     const map = new Map(this.corrections);
   const record: StoredCorrectionRecord = {
     rowIndex: row.rowIndex,
-    fieldType: fieldType === 'tenant' ? 'Tenant' : 'Parent',
+    fieldType: this.storedFieldType(fieldType),
       originalName: row.tenantName,
       correctedName: update.correctedName,
       changeType: update.changeType,
@@ -945,30 +1602,52 @@ export class ValidationComponent implements OnInit, OnDestroy {
       matchSource: update.matchSource,
       unitId: '',
       building: '',
-      appliesTo: fieldType === 'tenant'
-        ? this.tenantAppliesTo(row as ValidationResult)
-        : (row as ParentValidationResult).appliesTo ?? []
+      appliesTo: fieldType === 'parent'
+        ? (row as ParentValidationResult).appliesTo ?? []
+        : this.tenantAppliesTo(row as ValidationResult)
     };
     map.set(this.correctionKey(fileIndex, fieldType, row), record);
     this.corrections = map;
     this.bumpCorrectionsCache();
+    if (!this.suppressAutosaveDirty) {
+      this.markAutosaveDirty(fileIndex);
+    }
   }
 
   downloadProgress(fileIndex: number): DownloadChecklistState | undefined {
-    return this.downloadProgressByFile.get(fileIndex);
+    const fileId = this.resolveFileId(fileIndex);
+    return fileId != null ? this.downloadProgressByFile.get(fileId) : undefined;
   }
 
   isDownloadInProgress(fileIndex: number): boolean {
     return this.downloadProgress(fileIndex)?.inProgress ?? false;
   }
 
-  draftSaveStatus(fileIndex: number): 'idle' | 'saving' | 'saved' | 'error' {
-    return this.draftSaveState.get(fileIndex) ?? 'idle';
+  draftSaveStatus(fileIndex: number): DraftSaveStatus {
+    const fileId = this.resolveFileId(fileIndex);
+    return (fileId != null ? this.draftSaveState.get(fileId) : undefined) ?? 'idle';
+  }
+
+  autosaveLastSavedAt(fileIndex: number): Date | null {
+    const fileId = this.resolveFileId(fileIndex);
+    return (fileId != null ? this.autosave.get(fileId)?.lastSavedAt : undefined) ?? null;
+  }
+
+  dismissAutosaveWarning(fileIndex: number): void {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null || !this.autosaveWarningIds.has(fileId)) {
+      return;
+    }
+    const next = new Set(this.autosaveWarningIds);
+    next.delete(fileId);
+    this.autosaveWarningIds = next;
   }
 
   canSaveDraft(fileIndex: number): boolean {
-    return this.correctionsForFile(fileIndex).length > 0
-      && this.draftSaveStatus(fileIndex) !== 'saving';
+    const status = this.draftSaveStatus(fileIndex);
+    return !!this.batchResults[fileIndex]
+      && status !== 'saving'
+      && status !== 'closed';
   }
 
   saveDraft(fileIndex: number): void {
@@ -977,18 +1656,32 @@ export class ValidationComponent implements OnInit, OnDestroy {
     if (!file || !batchResult) {
       return;
     }
+    const fileId = batchResult.fileId;
+    const state = this.ensureAutosaveStateById(fileId);
+    if (state.disarmed) {
+      return;
+    }
     const payload = this.buildDownloadPayload(fileIndex);
     const resultsJson = JSON.stringify(batchResult);
     const decisionsJson = JSON.stringify(payload);
-    this.draftSaveState.set(fileIndex, 'saving');
+    this.draftSaveState.set(fileId, 'saving');
     this.validationApi
-      .saveDraft(file, batchResult.fileId, file.name, resultsJson, decisionsJson)
+      .saveDraft(file, fileId, file.name, resultsJson, decisionsJson)
       .subscribe({
         next: () => {
-          this.draftSaveState.set(fileIndex, 'saved');
+          state.persisted = true;
+          state.consecutiveFailures = 0;
+          state.lastSavedAt = new Date();
+          state.dirty = false;
+          this.draftSaveState.set(fileId, 'saved');
+          const currentIndex = this.indexOfFileId(fileId);
+          if (currentIndex >= 0) {
+            this.dismissAutosaveWarning(currentIndex);
+          }
+          this.loadDrafts();
         },
         error: () => {
-          this.draftSaveState.set(fileIndex, 'error');
+          this.draftSaveState.set(fileId, 'error');
         }
       });
   }
@@ -1001,23 +1694,24 @@ export class ValidationComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.clearDownloadRun(fileIndex);
-    const generation = (this.downloadGeneration.get(fileIndex) ?? 0) + 1;
-    this.downloadGeneration.set(fileIndex, generation);
+    const fileId = batchResult.fileId;
+    this.clearDownloadRunById(fileId);
+    const generation = (this.downloadGeneration.get(fileId) ?? 0) + 1;
+    this.downloadGeneration.set(fileId, generation);
 
-    this.setDownloadProgress(fileIndex, {
+    this.setDownloadProgressById(fileId, {
       steps: ['active', 'pending', 'pending'],
       activeStep: 1,
       errorMessage: null,
       inProgress: true
     });
 
-    this.scheduleDownloadStep(fileIndex, generation, ValidationComponent.DOWNLOAD_STEP_MS, () => {
-      const current = this.downloadProgress(fileIndex);
+    this.scheduleDownloadStep(fileId, generation, ValidationComponent.DOWNLOAD_STEP_MS, () => {
+      const current = this.downloadProgressByFile.get(fileId);
       if (!current?.inProgress || current.steps[2] === 'done') {
         return;
       }
-      this.setDownloadProgress(fileIndex, {
+      this.setDownloadProgressById(fileId, {
         steps: ['done', 'active', 'pending'],
         activeStep: 2,
         errorMessage: null,
@@ -1025,12 +1719,12 @@ export class ValidationComponent implements OnInit, OnDestroy {
       });
     });
 
-    this.scheduleDownloadStep(fileIndex, generation, ValidationComponent.DOWNLOAD_STEP_MS * 2, () => {
-      const current = this.downloadProgress(fileIndex);
+    this.scheduleDownloadStep(fileId, generation, ValidationComponent.DOWNLOAD_STEP_MS * 2, () => {
+      const current = this.downloadProgressByFile.get(fileId);
       if (!current?.inProgress || current.steps[2] === 'done') {
         return;
       }
-      this.setDownloadProgress(fileIndex, {
+      this.setDownloadProgressById(fileId, {
         steps: ['done', 'done', 'active'],
         activeStep: 3,
         errorMessage: null,
@@ -1044,30 +1738,41 @@ export class ValidationComponent implements OnInit, OnDestroy {
       .downloadCorrected(file, payload)
       .subscribe({
         next: (blob) => {
-          if (this.downloadGeneration.get(fileIndex) !== generation) {
+          if (this.downloadGeneration.get(fileId) !== generation) {
             return;
           }
-          this.clearDownloadTimers(fileIndex);
-          this.setDownloadProgress(fileIndex, {
+          this.clearDownloadTimersById(fileId);
+          this.setDownloadProgressById(fileId, {
             steps: ['done', 'done', 'done'],
             activeStep: null,
             errorMessage: null,
             inProgress: false
           });
           this.triggerFileDownload(file, blob);
-          this.downloadSubscriptions.delete(fileIndex);
+          this.downloadSubscriptions.delete(fileId);
+          this.disarmAutosaveById(fileId);
         },
         error: () => {
-          if (this.downloadGeneration.get(fileIndex) !== generation) {
+          if (this.downloadGeneration.get(fileId) !== generation) {
             return;
           }
-          this.clearDownloadTimers(fileIndex);
-          this.failDownloadAtActiveStep(fileIndex, 'Failed to generate corrected file.');
-          this.downloadSubscriptions.delete(fileIndex);
+          this.clearDownloadTimersById(fileId);
+          this.failDownloadAtActiveStepById(fileId, 'Failed to generate corrected file.');
+          this.downloadSubscriptions.delete(fileId);
         }
       });
 
-    this.downloadSubscriptions.set(fileIndex, subscription);
+    this.downloadSubscriptions.set(fileId, subscription);
+  }
+
+  private storedFieldType(fieldType: FieldType): StoredCorrectionRecord['fieldType'] {
+    if (fieldType === 'parent') {
+      return 'Parent';
+    }
+    if (fieldType === 'closedDealsTenant') {
+      return 'ClosedDealsTenant';
+    }
+    return 'Tenant';
   }
 
   private tenantAppliesTo(row: ValidationResult): ParentAppliesToItem[] {
@@ -1087,8 +1792,8 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return [];
   }
 
-  private correctionsForFile(fileIndex: number): StoredCorrectionRecord[] {
-    const prefix = `${fileIndex}|`;
+  private correctionsMatchingFileId(fileId: string): StoredCorrectionRecord[] {
+    const prefix = `${fileId}|`;
     const list: StoredCorrectionRecord[] = [];
     this.corrections.forEach((record, key) => {
       if (key.startsWith(prefix)) {
@@ -1098,8 +1803,18 @@ export class ValidationComponent implements OnInit, OnDestroy {
     return list;
   }
 
+  private correctionsForFile(fileIndex: number): StoredCorrectionRecord[] {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return [];
+    }
+    return this.correctionsMatchingFileId(fileId);
+  }
+
   private buildDownloadPayload(fileIndex: number): DownloadCorrectionsPayload {
-    const tenantCorrections = this.correctionsForFile(fileIndex)
+    const fileId = this.resolveFileId(fileIndex);
+    const records = fileId == null ? [] : this.correctionsMatchingFileId(fileId);
+    const tenantCorrections = records
       .filter(c => c.fieldType === 'Tenant')
       .flatMap(c => this.correctionTargets(c).map(target => ({
         rowIndex: c.rowIndex,
@@ -1111,7 +1826,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
         confidence: c.confidence,
         matchSource: c.matchSource
       })));
-    const parentCorrections = this.correctionsForFile(fileIndex)
+    const parentCorrections = records
       .filter(c => c.fieldType === 'Parent')
       .map(c => ({
         rowIndex: c.rowIndex,
@@ -1122,15 +1837,237 @@ export class ValidationComponent implements OnInit, OnDestroy {
         matchSource: c.matchSource,
         appliesTo: c.appliesTo
       }));
+    // OverlayKey grain is Building+Unit+Name. mapClosedDealsGroup builds
+    // appliesTo as one {building,unit} per sibling rowIndex so the row object
+    // keeps a slot per sheet row (T8). uniqueAppliesTo collapses that back to
+    // one identity per group here — payload item count, not rowIndexes.
+    const closedDealsCorrections = records
+      .filter(c => c.fieldType === 'ClosedDealsTenant')
+      .flatMap(c => this.uniqueAppliesTo(this.correctionTargets(c)).map(target => ({
+        rowIndex: c.rowIndex,
+        section: 'ClosedDeals' as const,
+        building: target.building,
+        unit: target.unit,
+        originalName: c.originalName,
+        correctedName: c.correctedName,
+        changeType: c.changeType,
+        confidence: c.confidence,
+        matchSource: c.matchSource
+      })));
     const parentResponse = this.batchResults[fileIndex]?.parentResponse;
     const copyTenantToParent =
-      !!parentResponse?.isCopiedFromTenant && this.parentCopyConfirmed.has(fileIndex);
+      !!parentResponse?.isCopiedFromTenant && fileId != null && this.parentCopyConfirmed.has(fileId);
     return {
-      fileId: this.batchResults[fileIndex].fileId,
+      fileId: fileId ?? '',
       tenantCorrections,
       parentCorrections,
+      closedDealsCorrections,
       copyTenantToParent
     };
+  }
+
+  private ensureAutosaveState(fileIndex: number): AutosaveState {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return this.createIdleAutosaveState();
+    }
+    return this.ensureAutosaveStateById(fileId);
+  }
+
+  private ensureAutosaveStateById(fileId: string): AutosaveState {
+    let state = this.autosave.get(fileId);
+    if (!state) {
+      state = this.createIdleAutosaveState();
+      this.autosave.set(fileId, state);
+    }
+    return state;
+  }
+
+  private createIdleAutosaveState(): AutosaveState {
+    return {
+      dirty: false,
+      debounceTimer: null,
+      maxWaitTimer: null,
+      inFlight: false,
+      pending: false,
+      persisted: false,
+      consecutiveFailures: 0,
+      disarmed: false,
+      lastSavedAt: null
+    };
+  }
+
+  private markAutosaveDirty(fileIndex: number): void {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+    this.markAutosaveDirtyById(fileId);
+  }
+
+  private markAutosaveDirtyById(fileId: string): void {
+    const state = this.ensureAutosaveStateById(fileId);
+    if (state.disarmed) {
+      return;
+    }
+    state.dirty = true;
+    if (state.debounceTimer != null) {
+      clearTimeout(state.debounceTimer);
+    }
+    state.debounceTimer = setTimeout(
+      () => this.flushAutosaveById(fileId),
+      ValidationComponent.AUTOSAVE_DEBOUNCE_MS
+    );
+    if (state.maxWaitTimer == null) {
+      state.maxWaitTimer = setTimeout(
+        () => this.flushAutosaveById(fileId),
+        ValidationComponent.AUTOSAVE_MAX_WAIT_MS
+      );
+    }
+  }
+
+  private flushAutosave(fileIndex: number): void {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+    this.flushAutosaveById(fileId);
+  }
+
+  private flushAutosaveById(fileId: string): void {
+    const state = this.ensureAutosaveStateById(fileId);
+    this.clearAutosaveTimersById(fileId);
+    if (state.disarmed || !state.dirty) {
+      return;
+    }
+    if (state.inFlight) {
+      state.pending = true;
+      return;
+    }
+
+    const located = this.locateByFileId(fileId);
+    if (!located) {
+      return;
+    }
+    const { fileIndex, file, batchResult } = located;
+
+    state.dirty = false;
+    state.inFlight = true;
+    this.draftSaveState.set(fileId, 'saving');
+
+    const onSuccess = (): void => {
+      state.inFlight = false;
+      state.persisted = true;
+      state.consecutiveFailures = 0;
+      state.lastSavedAt = new Date();
+      this.draftSaveState.set(fileId, 'saved');
+      const currentIndex = this.indexOfFileId(fileId);
+      if (currentIndex >= 0) {
+        this.dismissAutosaveWarning(currentIndex);
+      }
+      this.loadDrafts();
+      if (state.pending) {
+        state.pending = false;
+        this.markAutosaveDirtyById(fileId);
+      }
+    };
+
+    const onFailure = (err: unknown): void => {
+      const status = err instanceof HttpErrorResponse ? err.status : 0;
+
+      if (status === 409) {
+        state.inFlight = false;
+        state.disarmed = true;
+        this.clearAutosaveTimersById(fileId);
+        this.draftSaveState.set(fileId, 'closed');
+        return;
+      }
+
+      if (status === 404 && state.persisted) {
+        state.persisted = false;
+        state.dirty = true;
+        state.inFlight = false;
+        this.flushAutosaveById(fileId);
+        return;
+      }
+
+      state.inFlight = false;
+      state.consecutiveFailures++;
+      state.dirty = true;
+      this.draftSaveState.set(fileId, 'error');
+      if (state.consecutiveFailures >= ValidationComponent.AUTOSAVE_FAILURE_THRESHOLD) {
+        const next = new Set(this.autosaveWarningIds);
+        next.add(fileId);
+        this.autosaveWarningIds = next;
+      }
+    };
+
+    if (!state.persisted) {
+      const payload = this.buildDownloadPayload(fileIndex);
+      const resultsJson = JSON.stringify(batchResult);
+      const decisionsJson = JSON.stringify(payload);
+      this.validationApi
+        .saveDraft(file, fileId, file.name, resultsJson, decisionsJson)
+        .subscribe({ next: () => onSuccess(), error: err => onFailure(err) });
+      return;
+    }
+
+    this.validationApi
+      .updateDraftDecisions(fileId, JSON.stringify(this.buildDownloadPayload(fileIndex)))
+      .subscribe({ next: () => onSuccess(), error: err => onFailure(err) });
+  }
+
+  private disarmAutosave(fileIndex: number): void {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+    this.disarmAutosaveById(fileId);
+  }
+
+  private disarmAutosaveById(fileId: string): void {
+    const state = this.ensureAutosaveStateById(fileId);
+    state.disarmed = true;
+    this.clearAutosaveTimersById(fileId);
+    this.draftSaveState.set(fileId, 'closed');
+  }
+
+  private clearAutosaveTimers(fileIndex: number): void {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+    this.clearAutosaveTimersById(fileId);
+  }
+
+  private clearAutosaveTimersById(fileId: string): void {
+    const state = this.autosave.get(fileId);
+    if (!state) {
+      return;
+    }
+    if (state.debounceTimer != null) {
+      clearTimeout(state.debounceTimer);
+      state.debounceTimer = null;
+    }
+    if (state.maxWaitTimer != null) {
+      clearTimeout(state.maxWaitTimer);
+      state.maxWaitTimer = null;
+    }
+  }
+
+  private clearAllAutosaveTimers(): void {
+    this.autosave.forEach((_state, fileId) => this.clearAutosaveTimersById(fileId));
+  }
+
+  private onDocumentVisibilityChange(): void {
+    if (document.visibilityState !== 'hidden') {
+      return;
+    }
+    this.autosave.forEach((state, fileId) => {
+      if (state.dirty && !state.disarmed) {
+        this.flushAutosaveById(fileId);
+      }
+    });
   }
 
   private triggerFileDownload(file: File, blob: Blob): void {
@@ -1143,20 +2080,36 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   private setDownloadProgress(fileIndex: number, state: DownloadChecklistState): void {
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+    this.setDownloadProgressById(fileId, state);
+  }
+
+  private setDownloadProgressById(fileId: string, state: DownloadChecklistState): void {
     const map = new Map(this.downloadProgressByFile);
-    map.set(fileIndex, state);
+    map.set(fileId, state);
     this.downloadProgressByFile = map;
   }
 
   private failDownloadAtActiveStep(fileIndex: number, message: string): void {
-    const current = this.downloadProgress(fileIndex);
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+    this.failDownloadAtActiveStepById(fileId, message);
+  }
+
+  private failDownloadAtActiveStepById(fileId: string, message: string): void {
+    const current = this.downloadProgressByFile.get(fileId);
     const activeStep = current?.activeStep ?? 3;
     const steps: [DownloadStepStatus, DownloadStepStatus, DownloadStepStatus] = current
       ? [...current.steps]
       : ['pending', 'pending', 'pending'];
     steps[activeStep - 1] = 'failed';
 
-    this.setDownloadProgress(fileIndex, {
+    this.setDownloadProgressById(fileId, {
       steps,
       activeStep: null,
       errorMessage: message,
@@ -1165,36 +2118,52 @@ export class ValidationComponent implements OnInit, OnDestroy {
   }
 
   private scheduleDownloadStep(
-    fileIndex: number,
+    fileId: string,
     generation: number,
     delayMs: number,
     onFire: () => void
   ): void {
     const timerId = window.setTimeout(() => {
-      if (this.downloadGeneration.get(fileIndex) !== generation) {
+      if (this.downloadGeneration.get(fileId) !== generation) {
         return;
       }
       onFire();
     }, delayMs);
 
-    const timers = this.downloadTimers.get(fileIndex) ?? [];
+    const timers = this.downloadTimers.get(fileId) ?? [];
     timers.push(timerId);
-    this.downloadTimers.set(fileIndex, timers);
+    this.downloadTimers.set(fileId, timers);
   }
 
   private clearDownloadTimers(fileIndex: number): void {
-    const timers = this.downloadTimers.get(fileIndex);
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+    this.clearDownloadTimersById(fileId);
+  }
+
+  private clearDownloadTimersById(fileId: string): void {
+    const timers = this.downloadTimers.get(fileId);
     if (timers) {
       timers.forEach(id => clearTimeout(id));
-      this.downloadTimers.delete(fileIndex);
+      this.downloadTimers.delete(fileId);
     }
   }
 
   private clearDownloadRun(fileIndex: number): void {
-    this.clearDownloadTimers(fileIndex);
-    const existing = this.downloadSubscriptions.get(fileIndex);
+    const fileId = this.resolveFileId(fileIndex);
+    if (fileId == null) {
+      return;
+    }
+    this.clearDownloadRunById(fileId);
+  }
+
+  private clearDownloadRunById(fileId: string): void {
+    this.clearDownloadTimersById(fileId);
+    const existing = this.downloadSubscriptions.get(fileId);
     existing?.unsubscribe();
-    this.downloadSubscriptions.delete(fileIndex);
+    this.downloadSubscriptions.delete(fileId);
   }
 
   private clearAllDownloadRuns(): void {
@@ -1237,6 +2206,11 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
     this.validationApi.discardDraft(fileId).subscribe({
       next: () => {
+        this.batchResults.forEach((result, fileIndex) => {
+          if (result.fileId === fileId) {
+            this.disarmAutosave(fileIndex);
+          }
+        });
         this.loadDrafts();
         this.notify.success('Draft discarded.');
       },
@@ -1252,6 +2226,17 @@ export class ValidationComponent implements OnInit, OnDestroy {
 
   get inProgressDrafts(): DraftSummary[] {
     return this.drafts.filter(d => d.status === 'InProgress');
+  }
+
+  private matchSourceForResume(
+    changeType: CorrectionChangeType,
+    matchSource: MatchSource
+  ): MatchSource {
+    const blank = matchSource == null || String(matchSource).trim() === '';
+    if (changeType === 'ManualOverride' && blank) {
+      return 'ManualOverride';
+    }
+    return matchSource;
   }
 
   resumeDraft(fileId: string): void {
@@ -1290,6 +2275,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
         this.batchResults = [batchResult];
 
         const skipped: string[] = [];
+        this.suppressAutosaveDirty = true;
         for (const d of decisions.tenantCorrections) {
         const row = this.batchResults[0].response.results
           .find(r => r.rowIndex === d.rowIndex);
@@ -1301,7 +2287,7 @@ export class ValidationComponent implements OnInit, OnDestroy {
             correctedName: d.correctedName,
             changeType: d.changeType,
             confidence: d.confidence,
-            matchSource: d.matchSource
+            matchSource: this.matchSourceForResume(d.changeType, d.matchSource)
           });
         }
 
@@ -1316,14 +2302,41 @@ export class ValidationComponent implements OnInit, OnDestroy {
             correctedName: d.correctedName,
             changeType: d.changeType,
             confidence: d.confidence,
-            matchSource: d.matchSource
+            matchSource: this.matchSourceForResume(d.changeType, d.matchSource)
           });
         }
 
+        for (const d of decisions.closedDealsCorrections ?? []) {
+          const row = (this.batchResults[0].closedDealsResponse?.groups ?? [])
+            .map(group => this.mapClosedDealsGroup(group))
+            .find(r => r.rowIndex === d.rowIndex);
+          if (!row) {
+            skipped.push(`closedDealsTenant:${d.originalName}`);
+            continue;
+          }
+          this.setCorrection(0, 'closedDealsTenant', row, {
+            correctedName: d.correctedName,
+            changeType: d.changeType,
+            confidence: d.confidence,
+            matchSource: this.matchSourceForResume(d.changeType, d.matchSource)
+          });
+        }
+        this.suppressAutosaveDirty = false;
+
         this.clearRowsForBucketCache();
         this.autoAlignApplied = true;
-        this.expandedFiles = new Set<number>([0]);
-        this.activeFieldTabByFile = new Map<number, FieldType>([[0, 'tenant']]);
+        const resumedId = this.batchResults[0]?.fileId ?? batchResult.fileId;
+        const resumed = this.ensureAutosaveStateById(resumedId);
+        resumed.persisted = true;
+        resumed.dirty = false;
+        resumed.inFlight = false;
+        resumed.pending = false;
+        resumed.consecutiveFailures = 0;
+        resumed.disarmed = false;
+        resumed.lastSavedAt = detail.savedAt ? new Date(detail.savedAt) : null;
+        this.draftSaveState.set(resumedId, 'saved');
+        this.expandedFiles = new Set<string>([batchResult.fileId]);
+        this.activeFieldTabByFile = new Map<string, FieldType>([[batchResult.fileId, 'tenant']]);
         this.bucketPageState = new Map<string, { pageIndex: number; pageSize: number }>();
 
         if (skipped.length > 0) {

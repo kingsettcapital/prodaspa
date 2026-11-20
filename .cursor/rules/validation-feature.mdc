@@ -1,0 +1,1 @@
+Auto-save must never block the UI, never surface a dialog, and never fire during resume replay; all corrections-map writes must go through setCorrection/clearCorrection so the autosave dirty signal stays complete.

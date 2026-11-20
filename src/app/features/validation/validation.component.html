@@ -1,5 +1,8 @@
 <div class="validation-page">
-  <div class="validation-page__inner">
+  <div
+    class="validation-page__inner"
+    [class.validation-page__inner--with-drafts]="hasInProgressDrafts"
+  >
     <header class="validation-header">
       <h1 class="validation-header__title">Tenant Name Validation</h1>
       <p class="validation-header__subtitle">
@@ -7,8 +10,15 @@
       </p>
     </header>
 
-    <div class="validation-layout">
-      <div class="validation-layout__main">
+    <div
+      class="validation-layout"
+      [class.validation-layout--with-drafts]="hasInProgressDrafts"
+    >
+      <div
+        class="validation-layout__top"
+        [class.validation-layout__top--with-drafts]="hasInProgressDrafts"
+      >
+        <div class="validation-layout__controls">
     <section
       class="upload-bar"
       [class.upload-bar--dragging]="isDragging"
@@ -31,9 +41,19 @@
         <div class="upload-bar__body" *ngIf="selectedFiles.length > 0; else uploadEmpty">
           <p class="upload-bar__title">{{ selectedFiles.length }} file{{ selectedFiles.length === 1 ? '' : 's' }} selected</p>
           <ul class="upload-bar__file-list">
-            <li class="upload-bar__file-item" *ngFor="let file of selectedFiles">
+            <li class="upload-bar__file-item" *ngFor="let file of selectedFiles; let i = index">
               <mat-icon class="upload-bar__file-check">check_circle</mat-icon>
               <span class="upload-bar__file-name">{{ file.name }}</span>
+              <button
+                type="button"
+                class="upload-bar__file-remove"
+                [attr.aria-label]="'Remove ' + file.name"
+                title="Remove file"
+                [disabled]="isLoading"
+                (click)="removeSelectedFile(i, fileInput)"
+              >
+                <mat-icon class="upload-bar__file-remove-icon">delete_outline</mat-icon>
+              </button>
             </li>
           </ul>
         </div>
@@ -54,12 +74,55 @@
         </button>
       </div>
     </section>
+        </div>
 
-    <label class="asof-field">
-      As-of date
-      <input type="date" [(ngModel)]="asOfDate" name="asOfDate" />
-    </label>
+        <aside
+          class="validation-layout__rail"
+          *ngIf="hasInProgressDrafts"
+          aria-label="Drafts in progress"
+        >
+          <section class="drafts-panel">
+            <header class="drafts-panel__head">
+              <mat-icon class="drafts-panel__icon" aria-hidden="true">history</mat-icon>
+              <h2 class="drafts-panel__title">Drafts in progress</h2>
+              <span class="drafts-panel__count">{{ inProgressDrafts.length }}</span>
+            </header>
+            <ul class="drafts-panel__list">
+              <li
+                class="drafts-panel__row"
+                *ngFor="let d of inProgressDrafts; trackBy: trackByDraftFileId"
+              >
+                <div class="drafts-panel__info">
+                  <span class="drafts-panel__name" [title]="d.fileName">{{ d.fileName }}</span>
+                  <span class="drafts-panel__meta">
+                    Saved {{ d.savedAt | date:'medium':'America/Toronto' }}
+                  </span>
+                </div>
+                <div class="drafts-panel__actions">
+                  <button
+                    type="button"
+                    class="drafts-panel__resume"
+                    (click)="resumeDraft(d.fileId)"
+                  >
+                    Resume
+                  </button>
+                  <button
+                    type="button"
+                    class="drafts-panel__discard"
+                    (click)="discardDraft(d.fileId)"
+                    aria-label="Discard draft"
+                    title="Discard draft"
+                  >
+                    <mat-icon class="drafts-panel__discard-icon">delete_outline</mat-icon>
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </section>
+        </aside>
+      </div>
 
+      <div class="validation-layout__work">
     <button
       type="button"
       class="validate-all-btn"
@@ -89,40 +152,94 @@
           </div>
           <div class="file-card__header-center">
             <mat-button-toggle-group
-              *ngIf="isFileExpanded(fileIndex) && hasParentResponse(fileIndex)"
+              *ngIf="isFileExpanded(fileIndex)"
               class="field-toggle"
               [value]="activeFieldType(fileIndex)"
               (change)="onFieldToggleChange(fileIndex, $event)"
               (click)="$event.stopPropagation()"
             >
               <mat-button-toggle
-                value="tenant"
+                *ngFor="let type of fieldToggleTypesFor(fileIndex)"
+                [value]="type"
+                [disabled]="isFieldToggleDisabled(fileIndex, type)"
+                [attr.title]="fieldToggleDisabledReason(fileIndex, type) || null"
+                [class.field-toggle--cd-failed]="type === 'closedDealsTenant' && isClosedDealsFailed(fileIndex)"
                 (click)="$event.stopPropagation()"
               >
-                Tenant names ({{ fieldGroupRowCount(fileIndex, 'tenant') }})
-              </mat-button-toggle>
-              <mat-button-toggle
-                value="parent"
-                (click)="$event.stopPropagation()"
-              >
-                Parent names ({{ fieldGroupRowCount(fileIndex, 'parent') }})
+                {{ fieldToggleLabel(fileIndex, type) }}
               </mat-button-toggle>
             </mat-button-toggle-group>
           </div>
           <div class="file-card__header-right">
-            <span class="file-card__corrections-badge" *ngIf="acceptedCount(fileIndex) > 0">
-              {{ acceptedCount(fileIndex) }} corrections ready
+            <span class="file-card__corrections-badge" *ngIf="exactMatchCount(fileIndex) > 0">
+              {{ exactMatchCount(fileIndex) }} exact matches found
             </span>
+            <button
+              type="button"
+              class="file-card__remove"
+              [attr.aria-label]="'Remove ' + result.fileName"
+              title="Remove file"
+              [disabled]="isLoading"
+              (click)="$event.stopPropagation(); removeValidatedFile(fileIndex, fileInput)"
+            >
+              <mat-icon class="file-card__remove-icon">delete_outline</mat-icon>
+            </button>
           </div>
         </div>
 
         <div class="file-card__body" *ngIf="isFileExpanded(fileIndex)">
+          <div
+            class="file-card__filters"
+            *ngIf="!(isClosedDealsFailed(fileIndex) && activeFieldType(fileIndex) === 'closedDealsTenant')"
+          >
+            <div class="file-card__search">
+              <mat-icon class="file-card__search-icon">search</mat-icon>
+              <input
+                type="text"
+                class="file-card__search-input"
+                placeholder="Search unit or tenant name"
+                aria-label="Search unit or tenant name"
+                [ngModel]="searchTermFor(fileIndex)"
+                (ngModelChange)="onSearchTermChange(fileIndex, $event)"
+              >
+              <button
+                type="button"
+                class="file-card__search-clear"
+                *ngIf="searchTermFor(fileIndex)"
+                aria-label="Clear search"
+                (click)="onSearchTermChange(fileIndex, '')"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+            <span class="file-card__filters-summary" *ngIf="searchTermFor(fileIndex)">
+              Showing
+              {{ searchedFieldGroupRowCount(fileIndex, activeFieldType(fileIndex)) }}
+              of {{ fieldGroupRowCount(fileIndex, activeFieldType(fileIndex)) }} rows
+              — bulk actions still apply to all
+              {{ fieldGroupRowCount(fileIndex, activeFieldType(fileIndex)) }}
+            </span>
+          </div>
           <div class="file-card__scroll">
           <ng-container
             *ngTemplateOutlet="fieldBucketsTpl; context: { fileIndex: fileIndex, fieldGroup: fieldGroupConfig(activeFieldType(fileIndex)) }"
           ></ng-container>
 
           <ng-template #fieldBucketsTpl let-fileIndex="fileIndex" let-fieldGroup="fieldGroup">
+              <div
+                class="cd-failed"
+                *ngIf="fieldGroup.type === 'closedDealsTenant' && isClosedDealsFailed(fileIndex)"
+                role="alert"
+              >
+                <mat-icon class="cd-failed__icon">warning</mat-icon>
+                <div class="cd-failed__body">
+                  <p class="cd-failed__title">Closed Deals could not be parsed</p>
+                  <p class="cd-failed__message">{{ closedDealsFailureMessage(fileIndex) }}</p>
+                </div>
+              </div>
+              <ng-container
+                *ngIf="fieldGroup.type !== 'closedDealsTenant' || !isClosedDealsFailed(fileIndex)"
+              >
               <div
                 class="parent-copy-prompt"
                 *ngIf="fieldGroup.type === 'parent' && isParentCopyPending(fileIndex)"
@@ -201,6 +318,11 @@
                     class="bucket__table-wrap"
                     *ngIf="isSectionExpanded(fileIndex, fieldGroup.type, bucket.key)"
                   >
+                    <p class="bucket__search-info" *ngIf="searchTermFor(fileIndex)">
+                      {{ rowsForSearchedDisplayBucket(fileIndex, fieldGroup.type, bucket.key).length }}
+                      of {{ rowsForDisplayBucket(fileIndex, fieldGroup.type, bucket.key).length }}
+                      in this group match
+                    </p>
                     <app-validation-result-table
                       [fieldType]="fieldGroup.type"
                       [bucket]="bucket.key"
@@ -208,6 +330,7 @@
                       [rows]="rowsForPagedDisplayBucket(fileIndex, fieldGroup.type, bucket.key)"
                       [acceptedKeys]="tableAcceptedKeys(fileIndex, fieldGroup.type)"
                       [correctionByKey]="tableCorrectionMap(fileIndex, fieldGroup.type)"
+                      [changeTypeByKey]="tableChangeTypeMap(fileIndex, fieldGroup.type)"
                       (accept)="onTableAccept(fileIndex, fieldGroup.type, $event)"
                       (overrideRequest)="onTableOverrideRequest(fileIndex, fieldGroup.type, $event)"
                       (manual)="onTableManual(fileIndex, fieldGroup.type, $event)"
@@ -216,7 +339,7 @@
                     <mat-paginator
                       *ngIf="shouldShowPaginator(fileIndex, fieldGroup.type, bucket.key)"
                       class="bucket-paginator"
-                      [length]="bucketCount(fileIndex, fieldGroup.type, bucket.key)"
+                      [length]="rowsForSearchedDisplayBucket(fileIndex, fieldGroup.type, bucket.key).length"
                       [pageIndex]="pageIndexFor(fileIndex, fieldGroup.type, bucket.key)"
                       [pageSize]="pageSizeFor(fileIndex, fieldGroup.type, bucket.key)"
                       [pageSizeOptions]="pageSizeOptions"
@@ -227,10 +350,29 @@
                   </div>
                 </div>
               </ng-container>
+              </ng-container>
           </ng-template>
           </div>
 
           <div class="file-download" (click)="$event.stopPropagation()">
+            <div
+              class="autosave-warning"
+              *ngIf="isAutosaveWarning(fileIndex)"
+              role="status"
+            >
+              <span class="autosave-warning__text">
+                Auto-save isn't reaching the server. Use Save Draft to protect your work.
+              </span>
+              <button
+                type="button"
+                class="autosave-warning__dismiss"
+                (click)="dismissAutosaveWarning(fileIndex)"
+                aria-label="Dismiss auto-save warning"
+              >
+                <mat-icon class="autosave-warning__dismiss-icon">close</mat-icon>
+              </button>
+            </div>
+
             <div class="file-download__actions">
               <button
                 type="button"
@@ -253,18 +395,24 @@
               <button
                 type="button"
                 class="file-clear__btn"
+                [disabled]="isLoading"
                 (click)="clearBatch(fileInput)"
               >
                 <mat-icon class="file-clear__icon">close</mat-icon>
-                Clear File
+                Clear All Files
               </button>
             </div>
 
-            <p class="file-save__status file-save__status--saved" *ngIf="draftSaveStatus(fileIndex) === 'saved'">
-              ✓ Draft saved
-            </p>
-            <p class="file-save__status file-save__status--error" *ngIf="draftSaveStatus(fileIndex) === 'error'">
-              Draft save failed — please try again.
+            <p class="file-save__status" aria-live="polite">
+              <ng-container [ngSwitch]="draftSaveStatus(fileIndex)">
+                <span *ngSwitchCase="'saving'">Saving…</span>
+                <span *ngSwitchCase="'saved'">
+                  Saved {{ autosaveLastSavedAt(fileIndex) | date:'shortTime' }}
+                </span>
+                <span *ngSwitchCase="'error'">Auto-save failed</span>
+                <span *ngSwitchCase="'closed'">Draft closed</span>
+                <span *ngSwitchDefault>&nbsp;</span>
+              </ng-container>
             </p>
 
             <div
@@ -377,47 +525,6 @@
       </div>
     </section>
       </div>
-
-      <aside class="validation-layout__rail" *ngIf="hasInProgressDrafts">
-        <section class="resume-banner">
-          <div class="resume-banner__head">
-            <mat-icon class="resume-banner__icon">history</mat-icon>
-            <p class="resume-banner__title">Drafts in progress</p>
-          </div>
-          <div class="resume-banner__list">
-            <div
-              class="resume-draft"
-              *ngFor="let d of inProgressDrafts; trackBy: trackByDraftFileId"
-            >
-              <div class="resume-draft__header">
-                <div class="resume-draft__meta">
-                  <span class="resume-draft__name">{{ d.fileName }}</span>
-                  <span class="resume-draft__detail">
-                    Saved {{ d.savedAt | date:'medium':'America/Toronto' }}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  class="resume-draft__discard"
-                  (click)="discardDraft(d.fileId)"
-                  aria-label="Discard draft"
-                  title="Discard draft"
-                >
-                  <mat-icon class="resume-draft__discard-icon">delete_outline</mat-icon>
-                </button>
-              </div>
-              <button
-                type="button"
-                class="resume-draft__btn"
-                (click)="resumeDraft(d.fileId)"
-              >
-                Resume
-                <mat-icon class="resume-draft__btn-icon">arrow_forward</mat-icon>
-              </button>
-            </div>
-          </div>
-        </section>
-      </aside>
     </div>
   </div>
 

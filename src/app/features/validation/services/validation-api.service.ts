@@ -27,12 +27,9 @@ export class ValidationApiService {
     return `${this.base}/${path.replace(/^\/+/, '')}`;
   }
 
-  validateBatch(files: File[], asOf?: string): Observable<BatchValidationResult[]> {
+  validateBatch(files: File[]): Observable<BatchValidationResult[]> {
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
-    if (asOf) {
-      formData.append('asOf', asOf);
-    }
     return this.http.post<BatchValidationResult[]>(
       this.buildUrl('Validation/validate-batch'),
       formData,
@@ -101,6 +98,25 @@ export class ValidationApiService {
     return this.http.post<{ fileId: string; status: string }>(
       this.buildUrl(`Validation/draft/${encodeURIComponent(fileId)}/discard`),
       {},
+      { headers: this.defaultHeaders() }
+    );
+  }
+
+  updateDraftDecisions(
+    fileId: string,
+    decisionsJson: string
+  ): Observable<{ fileId: string; status: string }> {
+    return this.http.patch<{ fileId: string; status: string }>(
+      this.buildUrl(`Validation/draft/${encodeURIComponent(fileId)}/decisions`),
+      { decisionsJson },
+      { headers: this.defaultHeaders() }
+    );
+  }
+
+  clearDraft(fileId: string): Observable<{ fileId: string; status: string }> {
+    return this.http.post<{ fileId: string; status: string }>(
+      this.buildUrl(`Validation/draft/${encodeURIComponent(fileId)}/clear`),
+      null,
       { headers: this.defaultHeaders() }
     );
   }
