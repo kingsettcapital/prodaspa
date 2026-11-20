@@ -3,7 +3,7 @@ export const environment = {
   apiUrl: "https://prodagateway.kingsettcapital.com/api",
   validationApiUrl: "https://prodagateway.kingsettcapital.com/api",
   apiKey: "118dab24-8387-40e6-865d-04f55d4aaaa9",
-  production: false,
+  production: true,
   appVersion: require('../../package.json').version,
   azureConfig: {
     clientId: '1ca558e3-5dea-49ba-8080-f490ff880c00',
